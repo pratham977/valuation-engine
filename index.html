@@ -360,6 +360,9 @@ canvas{max-width:100%}
     <div class="nav-item" id="nav-archive" onclick="nav('archive')">
       <span class="nav-ic">▤</span>Archive<span class="nav-val" id="nv-archive">—</span>
     </div>
+    <div class="nav-item" id="nav-sbc" onclick="nav('sbc')">
+      <span class="nav-ic">Δ</span>SBC / ΔE<span class="nav-val" id="nv-sbc">—</span>
+    </div>
   </div>
 
   <div class="nav-section">
@@ -516,7 +519,7 @@ canvas{max-width:100%}
         <div class="card green"><div class="ct"><span class="d g"></span>Revenue</div><div style="font-family:var(--fd);font-size:20px;font-weight:700;color:var(--c2)" id="dRev">$—</div><div id="dRevG" class="ks" style="margin-top:6px">—</div></div>
         <div class="card"><div class="ct"><span class="d c"></span>EBITDA / Margin</div><div style="font-family:var(--fd);font-size:20px;font-weight:700;color:var(--c1)" id="dEbitda">$—</div><div id="dEm" class="ks" style="margin-top:6px">—</div></div>
         <div class="card purple"><div class="ct"><span class="d p"></span>EV/EBITDA</div><div style="font-family:var(--fd);font-size:20px;font-weight:700;color:var(--c4)" id="dEve">—</div><div id="dEveInd" class="ks" style="margin-top:6px">Industry: —</div></div>
-        <div class="card gold"><div class="ct"><span class="d gold"></span>P/E Ratio</div><div style="font-family:var(--fd);font-size:20px;font-weight:700;color:var(--c5)" id="dPe">—</div><div id="dPeInd" class="ks" style="margin-top:6px">Industry: —</div></div>
+        <div class="card gold"><div class="ct"><span class="d gold"></span>P/E Ratio</div><div style="font-family:var(--fd);font-size:20px;font-weight:700;color:var(--c5)" id="dPe">—</div><div id="dPeFwd" class="ks" style="margin-top:3px;color:var(--c1)">Fwd: —</div><div id="dPeInd" class="ks" style="margin-top:3px">Industry: —</div><div id="dPeAdj" class="ks" style="margin-top:3px;color:var(--c6)"></div></div>
       </div>
 
       <!-- ROW 6: Margins + Income Projection -->
@@ -649,6 +652,7 @@ canvas{max-width:100%}
 
     <!-- MODEL PAGES — rendered by JS -->
     <div class="page" id="page-archive"><div id="cnt-archive"></div></div>
+    <div class="page" id="page-sbc"><div id="cnt-sbc"></div></div>
     <div class="page" id="page-dcf"><div id="cnt-dcf"></div></div>
     <div class="page" id="page-graham"><div id="cnt-graham"></div></div>
     <div class="page" id="page-evmult"><div id="cnt-evmult"></div></div>
@@ -689,6 +693,7 @@ const S={
   l1tick:'MSFT',l2tick:'GOOGL',l3tick:'NVDA',
   apiKey:'',
   archive:[],
+  sbcYears:[],  // array of per-year SBC inputs: {yr,ni,gaapSbc,sharesStart,sharesEnd,buybackSpend,buybackShares,taxWithholding}
   leaders:[
     // MSFT — Microsoft (AI infrastructure + Copilot)
     {tick:'MSFT',name:'Microsoft Corp',eps:11.45,epsFwd:13.20,rev:245000,ebitda:112000,ni:88100,fcf:74200,dps:3.08,tbv:35.80,assets:512000,price:415.20,mktcap:3085000,pe:36.3,eve:27.6,roic:38.4,debt:98000,cash:80000,shares:7430},
@@ -768,9 +773,9 @@ function toast(msg,type='',dur=3200){
 // ─────────────────────────────────────────────────────────────────────
 // NAV
 // ─────────────────────────────────────────────────────────────────────
-const PAGES=['dashboard','inputs','football','archive','dcf','graham','evmult','sotp','rnpv','liq','mna','wacc','sensitivity','industry','leaders'];
-const TITLES={dashboard:'Visual Dashboard',inputs:'All Inputs',football:'Football Field',archive:'Archive',dcf:'DCF Model',graham:'Graham EM',evmult:'EV Multiples',sotp:'Sum-of-the-Parts',rnpv:'rNPV Biotech',liq:'Asset Liquidation',mna:'Comparable M&A',wacc:'WACC Builder',sensitivity:'Sensitivity Analysis',industry:'Industry Setup',leaders:'Market Leaders'};
-const RENDERS={dcf:renderDCF,graham:renderGraham,evmult:renderEV,sotp:renderSOTP,rnpv:renderRNPV,liq:renderLiq,mna:renderMNA,wacc:renderWACC,sensitivity:renderSens,industry:renderIndustry,leaders:renderLeaders,football:renderFootball,archive:renderArchive};
+const PAGES=['dashboard','inputs','football','archive','sbc','dcf','graham','evmult','sotp','rnpv','liq','mna','wacc','sensitivity','industry','leaders'];
+const TITLES={dashboard:'Visual Dashboard',inputs:'All Inputs',football:'Football Field',archive:'Archive',sbc:'SBC / ΔE Analysis',dcf:'DCF Model',graham:'Graham EM',evmult:'EV Multiples',sotp:'Sum-of-the-Parts',rnpv:'rNPV Biotech',liq:'Asset Liquidation',mna:'Comparable M&A',wacc:'WACC Builder',sensitivity:'Sensitivity Analysis',industry:'Industry Setup',leaders:'Market Leaders'};
+const RENDERS={dcf:renderDCF,graham:renderGraham,evmult:renderEV,sotp:renderSOTP,rnpv:renderRNPV,liq:renderLiq,mna:renderMNA,wacc:renderWACC,sensitivity:renderSens,industry:renderIndustry,leaders:renderLeaders,football:renderFootball,archive:renderArchive,sbc:renderSBC};
 function nav(id){
   PAGES.forEach(p=>{$('page-'+p)?.classList.remove('active');$('nav-'+p)?.classList.remove('active');});
   $('page-'+id)?.classList.add('active');
@@ -831,6 +836,7 @@ function recalcAll(){
   V.evr=V.ev>0&&S.rev>0?V.ev/S.rev:null;
   V.eve=V.ev>0&&S.ebitda>0?V.ev/S.ebitda:null;
   V.pe=S.price>0&&S.eps>0?S.price/S.eps:null;
+  V.peFwd=S.price>0&&S.epsFwd>0?S.price/S.epsFwd:null;
   // Models
   const dcfR=dcfFull(S.eps,S.wacc,S.epsG,S.termG,S.gYrs,S.termYrs);
   V.dcf=dcfR.val;V.dcfGV=dcfR.gv;V.dcfTV=dcfR.tv;V.dcfSched=dcfR.sched;
@@ -867,6 +873,13 @@ function recalcAll(){
   // Consensus avg
   const vals=[V.dcf,V.graham,V.evmult,V.sotp,V.liquidation,V.mna].filter(v=>v>0);
   V.avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+  // SBC-adjusted EPS & ΔE
+  V.deltaE=calcDeltaE(S.sbcYears);
+  V.sbcAdjEPS=V.deltaE!=null&&S.eps?S.eps*V.deltaE:null;
+  V.sbcAdjEPSFwd=V.deltaE!=null&&S.epsFwd?S.epsFwd*V.deltaE:null;
+  V.sbcAdjPE=V.sbcAdjEPS&&S.price?S.price/V.sbcAdjEPS:null;
+  V.sbcAdjPEFwd=V.sbcAdjEPSFwd&&S.price?S.price/V.sbcAdjEPSFwd:null;
+  set('nv-sbc',V.deltaE!=null?pct(V.deltaE*100):'—');
   // Nav badges
   const nb=[['dcf',V.dcf],['graham',V.graham],['evmult',V.evmult],['sotp',V.sotp],['rnpv',V.rnpv],['liq',V.liquidation],['mna',V.mna]];
   nb.forEach(([k,v])=>{const e=$('nv-'+k);if(e)e.textContent=v>0?f(v,'—'):' —';});
@@ -915,7 +928,8 @@ function renderDashboard(){
   set('dRev',fM(S.rev));set('dRevG',fP(S.epsG)+' fwd growth');
   set('dEbitda',fM(S.ebitda));set('dEm',fP(V.em)+' EBITDA margin');
   set('dEve',fX(V.eve));set('dEveInd','Industry: '+fX(S.indEVE));
-  set('dPe',fX(V.pe));set('dPeInd','Industry: '+fX(S.indPE));
+  set('dPe',fX(V.pe));set('dPeFwd','Fwd P/E: '+(V.peFwd?fX(V.peFwd):'—'));set('dPeInd','Industry: '+fX(S.indPE));
+  if(V.sbcAdjPE){set('dPeAdj','Owners\' P/E: '+fX(V.sbcAdjPE));}else{set('dPeAdj','');};
   // Valuation table
   const body=$('dashValBody');
   if(body)body.innerHTML=METHODS.map(m=>{
@@ -1225,7 +1239,8 @@ function renderGraham(){
     {label:'Margin of Safety (1.5×)',co:mos15,ia:null,lv:S.leaders.map(l=>l.price>0&&l.grahamVal15?(l.grahamVal15-l.price)/l.price*100:null),fmt:pct,higher:true},
     {sec:'Quality Context'},
     {label:'Current Price',co:S.price,ia:null,lv:S.leaders.map(l=>l.price),fmt:f,higher:false},
-    {label:'P/E (Current)',co:V.pe,ia:S.indPE,lv:S.leaders.map(l=>l.pe),fmt:fX,higher:false},
+    {label:'P/E — Trailing',co:V.pe,ia:S.indPE,lv:S.leaders.map(l=>l.pe),fmt:fX,higher:false},
+    {label:'P/E — Forward',co:V.peFwd,ia:null,lv:S.leaders.map(l=>l.epsFwd&&l.price?l.price/l.epsFwd:null),fmt:fX,higher:false},
     {label:'ROIC %',co:S.roic,ia:S.indROIC,lv:S.leaders.map(l=>l.roic),fmt:fP,higher:true},
   ])}</div>
   <div class="g2 mb">
@@ -1278,7 +1293,8 @@ function renderEV(){
     {label:'Enterprise Value ($M)',co:V.ev,ia:null,lv:S.leaders.map(l=>l.mktcap?(l.mktcap+l.debt-l.cash):null),fmt:fM,higher:true},
     {label:'EV / Revenue',co:V.evr,ia:null,lv:S.leaders.map(l=>l.eve?l.eve*0.5:null),fmt:fX,higher:false},
     {label:'EV / EBITDA',co:V.eve,ia:S.indEVE,lv:S.leaders.map(l=>l.eve),fmt:fX,higher:false},
-    {label:'P/E Ratio',co:V.pe,ia:S.indPE,lv:S.leaders.map(l=>l.pe),fmt:fX,higher:false},
+    {label:'P/E — Trailing',co:V.pe,ia:S.indPE,lv:S.leaders.map(l=>l.pe),fmt:fX,higher:false},
+    {label:'P/E — Forward',co:V.peFwd,ia:null,lv:S.leaders.map(l=>l.epsFwd&&l.price?l.price/l.epsFwd:null),fmt:fX,higher:false},
     {sec:'Profitability'},
     {label:'EBITDA ($M)',co:S.ebitda,ia:null,lv:S.leaders.map(l=>l.ebitda),fmt:fM,higher:true},
     {label:'EBITDA Margin',co:V.em,ia:S.indEM,lv:S.leaders.map(l=>l.em),fmt:fP,higher:true},
@@ -1491,7 +1507,8 @@ function renderMNA(){
     {label:'TBV Per Share',co:S.tbv,ia:null,lv:S.leaders.map(l=>l.tbv||0),fmt:f,higher:true},
     {label:'P/TBV (Current)',co:S.tbv>0?S.price/S.tbv:null,ia:null,lv:S.leaders.map(l=>l.tbv>0&&l.price>0?l.price/l.tbv:null),fmt:fX,higher:false},
     {label:'EPS (TTM)',co:S.eps,ia:null,lv:S.leaders.map(l=>l.eps),fmt:f,higher:true},
-    {label:'P/E (Current)',co:V.pe,ia:S.indPE,lv:S.leaders.map(l=>l.pe),fmt:fX,higher:false},
+    {label:'P/E — Trailing',co:V.pe,ia:S.indPE,lv:S.leaders.map(l=>l.pe),fmt:fX,higher:false},
+    {label:'P/E — Forward',co:V.peFwd,ia:null,lv:S.leaders.map(l=>l.epsFwd&&l.price?l.price/l.epsFwd:null),fmt:fX,higher:false},
     {sec:'Implied Acquisition Values'},
     {label:'P/TBV 1.5× Implied',co:v1,ia:null,lv:S.leaders.map(l=>l.tbv*1.5||0),fmt:f,higher:true},
     {label:'P/E 12× Deal',co:v2,ia:null,lv:S.leaders.map(l=>l.eps*12||0),fmt:f,higher:true},
@@ -1818,6 +1835,284 @@ function toggleApiInput(){
   area.style.display=area.style.display==='none'?'block':'none';
   if(S.apiKey)$('apiKeyInp').value=S.apiKey;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// SBC / ΔE — Burry's Owners' Earnings Framework
+// ─────────────────────────────────────────────────────────────────────
+
+function calcDeltaE(years){
+  if(!years||!years.length)return null;
+  let totalNI=0,totalTrueEarnings=0,anyValid=false;
+  years.forEach(y=>{
+    const ni=+y.ni||0; if(!ni)return;
+    const gaapSbc=+y.gaapSbc||0;
+    const sharesStart=+y.sharesStart||0;
+    const sharesEnd=+y.sharesEnd||0;
+    const buybackSpend=+y.buybackSpend||0;
+    const buybackShares=+y.buybackShares||0;
+    const taxWithholding=+y.taxWithholding||0;
+    const I=sharesEnd-sharesStart+buybackShares;
+    const P=buybackShares>0?buybackSpend/buybackShares:0;
+    const Vv=I*P;
+    const omega=Vv+taxWithholding;
+    let trueEarnings;
+    if(buybackShares>0){
+      trueEarnings=ni+gaapSbc-omega;
+    } else {
+      const d=sharesStart>0?(sharesEnd-sharesStart)/sharesStart:0;
+      trueEarnings=ni*(1-d);
+    }
+    totalNI+=ni;
+    totalTrueEarnings+=trueEarnings;
+    anyValid=true;
+  });
+  if(!anyValid||totalNI===0)return null;
+  return totalTrueEarnings/totalNI;
+}
+
+function calcYearDeltaE(y){
+  const ni=+y.ni||0;
+  const gaapSbc=+y.gaapSbc||0;
+  const sharesStart=+y.sharesStart||0;
+  const sharesEnd=+y.sharesEnd||0;
+  const buybackSpend=+y.buybackSpend||0;
+  const buybackShares=+y.buybackShares||0;
+  const taxWithholding=+y.taxWithholding||0;
+  if(!ni)return{I:0,P:0,Vv:0,C:taxWithholding,omega:0,trueEarnings:null,deltaE:null,pureDilution:false};
+  const I=sharesEnd-sharesStart+buybackShares;
+  const P=buybackShares>0?buybackSpend/buybackShares:0;
+  const Vv=I*P;
+  const omega=Vv+taxWithholding;
+  let trueEarnings,pureDilution=false;
+  if(buybackShares>0){
+    trueEarnings=ni+gaapSbc-omega;
+  } else {
+    pureDilution=true;
+    const d=sharesStart>0?(sharesEnd-sharesStart)/sharesStart:0;
+    trueEarnings=ni*(1-d);
+  }
+  const deltaE=ni!==0?trueEarnings/ni:null;
+  return{I,P,Vv,C:taxWithholding,omega,trueEarnings,deltaE,pureDilution};
+}
+
+async function fetchSBCData(){
+  const key=S.apiKey||$('apiKeyInp')?.value?.trim();
+  if(!key){toast('Save your GuruFocus API key first','err');return;}
+  const tick=(S.ticker||$('iTicker')?.value||'').trim().toUpperCase();
+  if(!tick){toast('Load a ticker first','err');return;}
+  const btn=$('sbcFetchBtn');
+  if(btn){btn.textContent='Fetching…';btn.disabled=true;}
+  try{
+    const r=await fetch(`https://api.gurufocus.com/public/user/${key}/stock/${tick}/financials`);
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    const d=await r.json();
+    const ann=d?.financials?.annuals||{};
+    const cf=ann.cashflow_statement||ann.cash_flow_statement||{};
+    const inc=ann.income_statement||{};
+    const bal=ann.balance_sheet||{};
+    const ps=ann.per_share_data_array||{};
+    const arr=k=>cf[k]||inc[k]||bal[k]||ps[k]||[];
+    const niArr=arr('Net Income');
+    const sbcArr=arr('Share-Based Compensation')||arr('Stock-Based Compensation')||[];
+    const shareArr=arr('Shares Outstanding (Diluted Average)')||arr('Shares Outstanding')||[];
+    const buybackArr=arr('Repurchase of Common Stock')||arr('Common Stock Repurchased')||[];
+    const years=d?.financials?.annuals?.metadata?.period_end_dates||[];
+    const len=Math.min(niArr.length,10);
+    const startIdx=niArr.length-len;
+    const newYears=[];
+    for(let i=0;i<len;i++){
+      const yr=years[startIdx+i]?years[startIdx+i].slice(0,4):String(new Date().getFullYear()-len+i+1);
+      const ni=parseFloat(niArr[startIdx+i])||0;
+      const gaapSbc=Math.abs(parseFloat(sbcArr[startIdx+i]||0));
+      const sharesEnd=parseFloat(shareArr[startIdx+i]||0);
+      const sharesStart=i>0?parseFloat(shareArr[startIdx+i-1]||0):sharesEnd;
+      const buybackSpend=Math.abs(parseFloat(buybackArr[startIdx+i]||0));
+      const existing=S.sbcYears.find(y=>String(y.yr)===String(yr))||{};
+      newYears.push({yr,ni,gaapSbc,
+        sharesStart:existing.sharesStart??sharesStart,
+        sharesEnd:existing.sharesEnd??sharesEnd,
+        buybackSpend,
+        buybackShares:existing.buybackShares??'',
+        taxWithholding:existing.taxWithholding??'',
+      });
+    }
+    S.sbcYears=newYears;
+    recalcAll();
+    if(_curPage==='sbc')renderSBC();
+    toast(`SBC data fetched for ${tick} (${len} years)`,'ok');
+  }catch(e){
+    toast(`SBC fetch failed: ${e.message}`,'err');
+  }finally{
+    if(btn){btn.textContent='↻ Auto-fill from GuruFocus';btn.disabled=false;}
+  }
+}
+
+async function parse10K(file){
+  const btn=$('sbcPdfBtn');
+  if(btn){btn.textContent='Reading PDF…';btn.disabled=true;}
+  try{
+    const base64=await new Promise((res,rej)=>{
+      const r=new FileReader();
+      r.onload=()=>res(r.result.split(',')[1]);
+      r.onerror=()=>rej(new Error('File read failed'));
+      r.readAsDataURL(file);
+    });
+    const yearsCtx=S.sbcYears.length?`Known fiscal years in our data: ${S.sbcYears.map(y=>y.yr).join(', ')}.`:'';
+    const prompt=`You are a financial analyst extracting specific data from a 10-K annual report.${yearsCtx}
+
+From the Consolidated Statement of Cash Flows, extract for EACH fiscal year:
+1. BUYBACK SHARES: shares repurchased in millions (look for "Repurchases of common stock", "Treasury stock" — find the SHARE COUNT not just dollar amount)
+2. TAX WITHHOLDING: cash paid for tax withholding on SBC vesting, in $millions (look in Financing Activities for "Taxes paid related to net share settlement", "Tax withholding payments on vesting", "Net payments related to SBC award activities")
+
+Return ONLY a JSON array, no other text:
+[{"year":"2024","buybackShares":1.23,"taxWithholding":456.7}]
+buybackShares in millions of shares. taxWithholding in $millions. Use null if not found.`;
+
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',max_tokens:1000,
+        messages:[{role:'user',content:[
+          {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+          {type:'text',text:prompt}
+        ]}]
+      })
+    });
+    if(!resp.ok)throw new Error(`API ${resp.status}`);
+    const data=await resp.json();
+    const text=data.content?.find(b=>b.type==='text')?.text||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    let matched=0;
+    parsed.forEach(row=>{
+      const existing=S.sbcYears.find(y=>String(y.yr)===String(row.year));
+      if(existing){
+        if(row.buybackShares!=null)existing.buybackShares=row.buybackShares;
+        if(row.taxWithholding!=null)existing.taxWithholding=row.taxWithholding;
+        matched++;
+      }
+    });
+    recalcAll();
+    if(_curPage==='sbc')renderSBC();
+    toast(`10-K parsed — filled ${matched} year(s)`,'ok');
+  }catch(e){
+    toast(`10-K parse failed: ${e.message}`,'err');
+    console.error('[10K PARSE]',e);
+  }finally{
+    if(btn){btn.textContent='📄 Upload 10-K PDF';btn.disabled=false;}
+  }
+}
+
+function sbcFieldChange(yr,field,val){
+  const y=S.sbcYears.find(y=>String(y.yr)===String(yr));
+  if(y)y[field]=val===''?'':parseFloat(val)||0;
+  V.deltaE=calcDeltaE(S.sbcYears);
+  V.sbcAdjEPS=V.deltaE!=null&&S.eps?S.eps*V.deltaE:null;
+  V.sbcAdjEPSFwd=V.deltaE!=null&&S.epsFwd?S.epsFwd*V.deltaE:null;
+  V.sbcAdjPE=V.sbcAdjEPS&&S.price?S.price/V.sbcAdjEPS:null;
+  V.sbcAdjPEFwd=V.sbcAdjEPSFwd&&S.price?S.price/V.sbcAdjEPSFwd:null;
+  set('nv-sbc',V.deltaE!=null?pct(V.deltaE*100):'—');
+  const res=$('sbcResults');if(res)res.innerHTML=buildSBCResults();
+}
+
+function buildSBCResults(){
+  if(!S.sbcYears.length)return '';
+  const rows=S.sbcYears.map(y=>{
+    const r=calcYearDeltaE(y);
+    const dc=r.deltaE!=null?(r.deltaE>=0.85?'var(--c2)':r.deltaE>=0.70?'var(--c5)':'var(--c6)'):'var(--t3)';
+    const td=(v,fmt='')=>`<td style="padding:7px 10px;text-align:right;font-family:var(--fm);color:var(--t2)">${v!=null&&v!==0?fmt+v.toFixed(v>100?0:2)+(fmt==='$'?'M':''):'—'}</td>`;
+    return `<tr style="border-bottom:1px solid rgba(40,120,200,0.06)">
+      <td style="padding:7px 10px;font-family:var(--fd);font-weight:700;color:var(--t1)">${y.yr}</td>
+      ${td(y.ni,'$')}${td(y.gaapSbc,'$')}
+      <td style="padding:7px 10px;text-align:right;font-family:var(--fm);color:var(--t2)">${r.I?r.I.toFixed(2)+'M':'—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-family:var(--fm);color:var(--t2)">${r.P?'$'+r.P.toFixed(2):'—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-family:var(--fm);color:var(--c6)">${r.Vv?'$'+r.Vv.toFixed(0)+'M':'—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-family:var(--fm);color:var(--c6)">${r.C?'$'+r.C.toFixed(0)+'M':'—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-family:var(--fm);color:var(--c6)">${r.omega?'$'+r.omega.toFixed(0)+'M':'—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-family:var(--fm);color:var(--c2)">${r.trueEarnings!=null?'$'+r.trueEarnings.toFixed(0)+'M':'—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-family:var(--fd);font-weight:700;font-size:13px;color:${dc}">${r.deltaE!=null?(r.deltaE*100).toFixed(1)+'%':r.pureDilution?'<span style="color:var(--t3);font-size:10px">Pure Dilution</span>':'—'}</td>
+    </tr>`;
+  }).join('');
+  const pooled=V.deltaE;
+  const pc=pooled!=null?(pooled>=0.85?'var(--c2)':pooled>=0.70?'var(--c5)':'var(--c6)'):'var(--t3)';
+  return `
+  <div class="card mb" style="overflow-x:auto">
+    <div class="ct" style="margin-bottom:14px">Year-by-Year ΔE Breakdown</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:900px">
+    <thead><tr style="border-bottom:2px solid var(--b)">
+      ${['Year','Net Income','GAAP SBC','Shares Issued (I)','Avg Buyback Price (P)','Anti-Dilution V','Tax Withholding C','Total Ω','True Owners\' Earnings','ΔE'].map((h,i)=>`<th style="padding:7px 10px;text-align:${i===0?'left':'right'};font-family:var(--fd);font-size:8px;letter-spacing:.1em;color:var(--t2);text-transform:uppercase">${h}</th>`).join('')}
+    </tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr style="border-top:2px solid var(--b);background:rgba(40,120,200,0.06)">
+      <td colspan="9" style="padding:8px 10px;font-family:var(--fd);font-size:9px;letter-spacing:.1em;color:var(--t2);text-transform:uppercase">Pooled Earnings-Weighted ΔE</td>
+      <td style="padding:8px 10px;text-align:right;font-family:var(--fd);font-weight:900;font-size:16px;color:${pc}">${pooled!=null?(pooled*100).toFixed(1)+'%':'—'}</td>
+    </tr></tfoot>
+    </table>
+  </div>
+  <div class="g4 mb">
+    ${kpiCard('Pooled ΔE',pooled!=null?(pooled*100).toFixed(1)+'%':'—','Earnings-weighted across all years',pooled!=null?(pooled>=0.85?'green':pooled>=0.70?'gold':'red'):'')}
+    ${kpiCard('GAAP EPS',f(S.eps),'As reported','')}
+    ${kpiCard('SBC-Adjusted EPS',V.sbcAdjEPS?f(V.sbcAdjEPS):'—','True owners\' earnings per share',V.sbcAdjEPS&&S.eps?(V.sbcAdjEPS<S.eps*0.85?'red':V.sbcAdjEPS<S.eps*0.95?'gold':'green'):'')}
+    ${kpiCard('Owners\' P/E',V.sbcAdjPE?fX(V.sbcAdjPE):'—','vs GAAP P/E: '+(V.pe?fX(V.pe):'—'),V.sbcAdjPE&&V.pe?(V.sbcAdjPE>V.pe*1.2?'red':V.sbcAdjPE>V.pe*1.05?'gold':'green'):'')}
+  </div>
+  ${pooled!=null?`<div class="card" style="border-left:3px solid ${pc};padding:16px 20px">
+    <div style="font-family:var(--fd);font-size:8px;letter-spacing:.14em;color:var(--t2);text-transform:uppercase;margin-bottom:8px">Interpretation</div>
+    <div style="font-size:12px;color:var(--t1);line-height:1.7">${
+      pooled>=0.90?`<span style="color:var(--c2)">✓ Low SBC drag.</span> ${(pooled*100).toFixed(1)}% of GAAP earnings are real owners' earnings — SBC is not materially distorting reported results.`
+      :pooled>=0.80?`<span style="color:var(--c5)">⚠ Moderate SBC drag.</span> Only ${(pooled*100).toFixed(1)}% of reported earnings belong to shareholders. The true P/E is ${V.sbcAdjPE?fX(V.sbcAdjPE):'—'} vs headline ${V.pe?fX(V.pe):'—'} — a ~${((1/pooled-1)*100).toFixed(0)}% overstatement.`
+      :`<span style="color:var(--c6)">✗ Severe SBC drag.</span> Only ${(pooled*100).toFixed(1)}% of GAAP earnings are real. True owners' P/E is ${V.sbcAdjPE?fX(V.sbcAdjPE):'—'} vs headline ${V.pe?fX(V.pe):'—'} — a ${((1/pooled-1)*100).toFixed(0)}% overstatement. SBC is a material hidden cost destroying shareholder value.`
+    }</div>
+  </div>`:''}`;
+}
+
+function renderSBC(){
+  const c=$('cnt-sbc');if(!c)return;
+  const hasYears=S.sbcYears&&S.sbcYears.length>0;
+  const inputTable=hasYears?`
+  <div class="card mb" style="overflow-x:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="ct">Input Table — Yellow Fields Require 10-K</div>
+      <div style="font-size:10px;color:var(--t2)">All amounts in $M except share counts (millions of shares)</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:700px">
+    <thead><tr style="border-bottom:2px solid var(--b)">
+      ${['Year','Net Income','GAAP SBC','Shares Start','Shares End','Buyback Spend','★ Buyback Shares','★ Tax Withholding'].map((h,i)=>`<th style="padding:7px 10px;text-align:${i===0?'left':'right'};font-family:var(--fd);font-size:8px;letter-spacing:.1em;color:${i>=6?'var(--c5)':'var(--t2)'};text-transform:uppercase">${h}</th>`).join('')}
+    </tr></thead>
+    <tbody>${S.sbcYears.map(y=>`<tr style="border-bottom:1px solid rgba(40,120,200,0.06)">
+      <td style="padding:6px 10px;font-family:var(--fd);font-weight:700;color:var(--t1)">${y.yr}</td>
+      ${['ni','gaapSbc','sharesStart','sharesEnd','buybackSpend'].map(fld=>`<td style="padding:4px 6px;text-align:right"><input type="number" value="${y[fld]||''}" step="0.01" style="width:88px;background:var(--sur2);border:1px solid var(--b);border-radius:4px;color:var(--t1);font-family:var(--fm);font-size:11px;padding:4px 6px;text-align:right;outline:none" onchange="sbcFieldChange('${y.yr}','${fld}',this.value)" onfocus="this.style.borderColor='var(--c1)'" onblur="this.style.borderColor='var(--b)'"></td>`).join('')}
+      ${['buybackShares','taxWithholding'].map(fld=>`<td style="padding:4px 6px;text-align:right"><input type="number" value="${y[fld]||''}" step="0.01" placeholder="10-K" style="width:88px;background:rgba(255,190,50,0.07);border:1px solid rgba(255,190,50,0.35);border-radius:4px;color:var(--t1);font-family:var(--fm);font-size:11px;padding:4px 6px;text-align:right;outline:none" onchange="sbcFieldChange('${y.yr}','${fld}',this.value)" onfocus="this.style.borderColor='var(--c5)'" onblur="this.style.borderColor='rgba(255,190,50,0.35)'"></td>`).join('')}
+    </tr>`).join('')}
+    </tbody></table>
+    <div style="margin-top:10px;font-size:10px;color:var(--t2)">★ Yellow = only reliable source is the raw 10-K. Look in <em>Financing Activities</em> of the Consolidated Statement of Cash Flows.</div>
+  </div>`
+  :`<div class="card mb" style="text-align:center;padding:40px 20px">
+    <div style="font-size:12px;color:var(--t2);margin-bottom:8px">No SBC data loaded yet.</div>
+    <div style="font-size:11px;color:var(--t3)">Click <strong>↻ Auto-fill from GuruFocus</strong> to load historical financials, then upload the 10-K PDF for the two fields only available in raw filings.</div>
+  </div>`;
+
+  c.innerHTML=`<div>
+  <div class="ph">
+    <div class="ph-l"><h1>SBC / ΔE Analysis</h1><p>Burry's Owners' Earnings Framework — true economic cost of stock-based compensation</p></div>
+    <div class="ph-r" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn sm ghost" id="sbcFetchBtn" onclick="fetchSBCData()">↻ Auto-fill from GuruFocus</button>
+      <label class="btn sm ghost" style="cursor:pointer" id="sbcPdfBtn">📄 Upload 10-K PDF<input type="file" accept=".pdf" style="display:none" onchange="if(this.files[0])parse10K(this.files[0])"></label>
+      <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=10-K&dateb=&owner=include&count=5&company=${encodeURIComponent(S.ticker||'')}" target="_blank" class="btn sm ghost" style="text-decoration:none">🔗 SEC EDGAR 10-K</a>
+    </div>
+  </div>
+
+  <div class="card mb" style="padding:14px 18px;border-left:3px solid var(--c1)">
+    <div style="font-family:var(--fd);font-size:8px;letter-spacing:.14em;color:var(--t2);text-transform:uppercase;margin-bottom:10px">Burry Framework — 5 Steps to ΔE</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;font-size:10px;text-align:center">
+      ${[['I = ΔShares + Buybacks','Shares issued via SBC','var(--t1)'],['P = Spend ÷ Shares','Avg buyback price','var(--t1)'],['V = I × P','Anti-dilution cost','var(--c6)'],['Ω = V + C','Total true SBC cost','var(--c6)'],['ΔE = (NI+SBC−Ω)÷NI','Fraction of earnings that\'s real','var(--c2)']].map(([f,d,col])=>`<div style="background:var(--sur2);border-radius:6px;padding:10px 8px"><div style="font-family:var(--fm);font-size:12px;color:${col};margin-bottom:4px">${f}</div><div style="font-size:9px;color:var(--t3)">${d}</div></div>`).join('')}
+    </div>
+  </div>
+
+  ${inputTable}
+  <div id="sbcResults">${hasYears?buildSBCResults():''}</div>
+  </div>`;
+}
+
 function saveApiKey(){
   const key=$('apiKeyInp')?.value?.trim();
   if(!key){toast('Enter an API key first','err');return;}
@@ -1956,7 +2251,9 @@ async function initApp(){
   const cur=await storeGet('current-analysis',true);
   if(cur){
     try{
-      Object.assign(S,JSON.parse(cur));
+      const parsed=JSON.parse(cur);
+      Object.assign(S,parsed);
+      if(parsed.sbcYears)S.sbcYears=parsed.sbcYears;
       populateInputs();
     }catch(e){}
   }
