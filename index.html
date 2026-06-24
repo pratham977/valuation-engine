@@ -1968,7 +1968,7 @@ Return ONLY a JSON array, no other text:
 [{"year":"2024","buybackShares":1.23,"taxWithholding":456.7}]
 buybackShares in millions of shares. taxWithholding in $millions. Use null if not found.`;
 
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    const resp=await fetch('https://ve-proxy.onrender.com/parse-10k',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
