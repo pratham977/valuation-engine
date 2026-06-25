@@ -1971,17 +1971,11 @@ buybackShares in millions of shares. taxWithholding in $millions. Use null if no
     const resp=await fetch('https://ve-proxy.onrender.com/parse-10k',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',max_tokens:1000,
-        messages:[{role:'user',content:[
-          {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
-          {type:'text',text:prompt}
-        ]}]
-      })
+      body:JSON.stringify({pdfBase64:base64,prompt})
     });
     if(!resp.ok)throw new Error(`API ${resp.status}`);
     const data=await resp.json();
-    const text=data.content?.find(b=>b.type==='text')?.text||'';
+    const text=data.text||'';
     const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
     let matched=0;
     parsed.forEach(row=>{
