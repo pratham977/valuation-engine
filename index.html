@@ -1912,10 +1912,42 @@ async function fetchSBCData(){
     const bal=ann.balance_sheet||{};
     const ps=ann.per_share_data_array||{};
     const arr=k=>cf[k]||inc[k]||bal[k]||ps[k]||[];
+
+    // Log all available keys for debugging
+    const allKeys=[...new Set([...Object.keys(cf),...Object.keys(inc),...Object.keys(bal),...Object.keys(ps)])];
+    console.log('[GF] All available keys:', allKeys);
+
     const niArr=arr('Net Income');
     const sbcArr=arr('Share-Based Compensation')||arr('Stock-Based Compensation')||[];
     const shareArr=arr('Shares Outstanding (Diluted Average)')||arr('Shares Outstanding')||[];
     const buybackArr=arr('Repurchase of Common Stock')||arr('Common Stock Repurchased')||[];
+
+    // Try every known GuruFocus key for buyback share count
+    const buybackShareKeys=[
+      'Common Stock Shares Repurchased',
+      'Shares Repurchased',
+      'Treasury Stock Shares Acquired',
+      'Repurchase of Common Stock Shares',
+      'Common Stock Repurchased Shares',
+      'Buyback Shares',
+      'Share Buyback',
+      'Shares Bought Back',
+      'Treasury Shares Purchased',
+      'Number of Shares Repurchased',
+    ];
+    let buybackShareArr=[];
+    for(const k of buybackShareKeys){
+      const found=arr(k);
+      if(found&&found.length){
+        console.log(`[GF] Found buyback shares under key: "${k}"`,found);
+        buybackShareArr=found;
+        break;
+      }
+    }
+    if(!buybackShareArr.length){
+      console.log('[GF] No buyback share count key found. Available CF keys:',Object.keys(cf));
+    }
+
     const years=d?.financials?.annuals?.metadata?.period_end_dates||[];
     const len=Math.min(niArr.length,10);
     const startIdx=niArr.length-len;
@@ -1927,19 +1959,21 @@ async function fetchSBCData(){
       const sharesEnd=parseFloat(shareArr[startIdx+i]||0);
       const sharesStart=i>0?parseFloat(shareArr[startIdx+i-1]||0):sharesEnd;
       const buybackSpend=Math.abs(parseFloat(buybackArr[startIdx+i]||0));
+      const buybackSharesGF=buybackShareArr.length?Math.abs(parseFloat(buybackShareArr[startIdx+i]||0)):null;
       const existing=S.sbcYears.find(y=>String(y.yr)===String(yr))||{};
       newYears.push({yr,ni,gaapSbc,
         sharesStart:existing.sharesStart??sharesStart,
         sharesEnd:existing.sharesEnd??sharesEnd,
         buybackSpend,
-        buybackShares:existing.buybackShares??'',
+        buybackShares:existing.buybackShares||(buybackSharesGF||''),
         taxWithholding:existing.taxWithholding??'',
       });
     }
     S.sbcYears=newYears;
     recalcAll();
     if(_curPage==='sbc')renderSBC();
-    toast(`SBC data fetched for ${tick} (${len} years)`,'ok');
+    const gotShares=buybackShareArr.length>0;
+    toast(`SBC data fetched for ${tick} (${len} years)${gotShares?' + buyback shares ✓':' — buyback shares not found in GF, use 10-K'}`,'ok');
   }catch(e){
     toast(`SBC fetch failed: ${e.message}`,'err');
   }finally{
