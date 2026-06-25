@@ -1918,12 +1918,13 @@ async function fetchSBCData(){
     console.log('[GF] All available keys:', allKeys);
 
     const niArr=arr('Net Income');
-    const sbcArr=arr('Share-Based Compensation')||arr('Stock-Based Compensation')||[];
+    const sbcArr=arr('Stock Based Compensation')||arr('Share-Based Compensation')||arr('Stock-Based Compensation')||arr('Share Based Compensation')||[];
     const shareArr=arr('Shares Outstanding (Diluted Average)')||arr('Shares Outstanding')||[];
-    const buybackArr=arr('Repurchase of Common Stock')||arr('Common Stock Repurchased')||[];
+    const buybackArr=arr('Repurchase of Stock')||arr('Repurchase of Common Stock')||arr('Common Stock Repurchased')||arr('Purchase of Common Stock')||[];
 
     // Try every known GuruFocus key for buyback share count
     const buybackShareKeys=[
+      'Repurchase of Stock Shares',
       'Common Stock Shares Repurchased',
       'Shares Repurchased',
       'Treasury Stock Shares Acquired',
@@ -1934,6 +1935,7 @@ async function fetchSBCData(){
       'Shares Bought Back',
       'Treasury Shares Purchased',
       'Number of Shares Repurchased',
+      'Repurchase of Stock (Shares)',
     ];
     let buybackShareArr=[];
     for(const k of buybackShareKeys){
