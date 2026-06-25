@@ -2125,20 +2125,38 @@ async function parse10K(file){
     }
 
     // ── Also find year-tagged buyback mentions ─────────────────────────
-    // e.g. "In 2024, we repurchased 28.1 million shares"
+    // Handles: "repurchased 32.2 million shares" near a year mention
+    // Also handles FISV style: "We Repurchased 32.2 million shares...2024"
     function findYearTaggedBuybacks(pagesArr){
       const results={};
-      const pat=/(?:during|in|for)\s+(20\d{2})[^.]{0,100}repurchased[^.]{0,100}([\d,.]+)\s+million\s+shares/gi;
-      const pat2=/(20\d{2})[^.]{0,50}repurchased\s+([\d,.]+)\s+million\s+shares/gi;
+      // Pattern 1: "during/in YEAR ... repurchased X million shares"
+      const patterns=[
+        /(?:during|in|for|fiscal)\s+(20\d{2})[^.]{0,150}repurchased[^.]{0,100}([\d,.]+)\s*million\s+shares/gi,
+        /(20\d{2})[^.]{0,100}repurchased\s+([\d,.]+)\s*million\s+shares/gi,
+        /repurchased\s+([\d,.]+)\s*million\s+shares[^.]{0,100}(20\d{2})/gi,
+        /repurchased\s+([\d,.]+)\s*million\s+shares[^.]{0,150}(?:year ended|fiscal year)[^0-9]{0,20}(20\d{2})/gi,
+        // FISV style — share count appears near year in table
+        /(20\d{2})[^.]{0,50}([\d,.]+)\s*million\s+shares[^.]{0,50}repurchased/gi,
+        /purchased\s+([\d,.]+)\s*million\s+shares[^.]{0,100}(20\d{2})/gi,
+        /(20\d{2})[^.]{0,50}purchased\s+([\d,.]+)\s*million\s+shares/gi,
+      ];
       for(const pg of pagesArr){
-        for(const p of [pat,pat2]){
-          p.lastIndex=0;
-          for(const m of [...pg.text.matchAll(p)]){
-            const yr=m[1];const shares=parseFloat(m[2].replace(/,/g,''));
-            if(yr&&!isNaN(shares)&&shares>0&&shares<5000){
-              if(!results[yr]||results[yr].value<shares){
+        for(const pat of patterns){
+          pat.lastIndex=0;
+          for(const m of [...pg.text.matchAll(pat)]){
+            // Determine which group is year vs shares based on content
+            let yr,shares;
+            const g1=m[1]?.replace(/,/g,'');
+            const g2=m[2]?.replace(/,/g,'');
+            if(g1&&g1.length===4&&parseInt(g1)>=2015){
+              yr=g1;shares=parseFloat(g2);
+            } else if(g2&&g2.length===4&&parseInt(g2)>=2015){
+              yr=g2;shares=parseFloat(g1);
+            } else continue;
+            if(yr&&!isNaN(shares)&&shares>0.1&&shares<5000){
+              if(!results[yr]){
                 results[yr]={value:shares,pageNum:pg.pageNum,snippet:m[0].slice(0,150)};
-                console.log(`[10K] Year-tagged buyback: ${yr} → ${shares}M shares, page ${pg.pageNum}`);
+                console.log(`[10K] Year-tagged: ${yr} → ${shares}M shares, page ${pg.pageNum}: "${m[0].slice(0,60)}"`);
               }
             }
           }
@@ -2169,8 +2187,10 @@ async function parse10K(file){
       if(!existing)return;
 
       // Tax withholding — assign by column position
-      const tw=taxResults[i]??taxResults[0]??null;
-      if(tw&&tw.value>0&&tw.value<50000){
+      // Filter out combined treasury stock lines (>$2000M are almost certainly combined buyback+tax)
+      const validTaxResults=taxResults.filter(t=>t.value<2000);
+      const tw=validTaxResults[i]??validTaxResults[0]??null;
+      if(tw&&tw.value>0&&tw.value<2000){
         existing.taxWithholding=tw.value;
         _10kEvidence.push({field:'Tax Withholding',year:yr,value:tw.value,pageNum:tw.pageNum,snippet:tw.snippet});
         matched++;
