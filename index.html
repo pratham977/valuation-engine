@@ -322,7 +322,6 @@ canvas{max-width:100%}
 <div class="sidebar">
   <div class="sb-logo">
     <div class="sb-logo-mark">VALUATION<br>ENGINE PRO</div>
-    <div class="sb-logo-sub">Multi-Industry Model · v7</div>
     <div class="sb-logo-sub" id="storageMode" style="margin-top:2px"></div>
   </div>
 
@@ -362,6 +361,9 @@ canvas{max-width:100%}
     </div>
     <div class="nav-item" id="nav-sbc" onclick="nav('sbc')">
       <span class="nav-ic">Δ</span>SBC / ΔE<span class="nav-val" id="nv-sbc">—</span>
+    </div>
+    <div class="nav-item" id="nav-inputsguide" onclick="nav('inputsguide')">
+      <span class="nav-ic">⊞</span>Inputs Guide
     </div>
   </div>
 
@@ -653,6 +655,7 @@ canvas{max-width:100%}
     <!-- MODEL PAGES — rendered by JS -->
     <div class="page" id="page-archive"><div id="cnt-archive"></div></div>
     <div class="page" id="page-sbc"><div id="cnt-sbc"></div></div>
+    <div class="page" id="page-inputsguide"><div id="cnt-inputsguide"></div></div>
     <div class="page" id="page-dcf"><div id="cnt-dcf"></div></div>
     <div class="page" id="page-graham"><div id="cnt-graham"></div></div>
     <div class="page" id="page-evmult"><div id="cnt-evmult"></div></div>
@@ -773,9 +776,9 @@ function toast(msg,type='',dur=3200){
 // ─────────────────────────────────────────────────────────────────────
 // NAV
 // ─────────────────────────────────────────────────────────────────────
-const PAGES=['dashboard','inputs','football','archive','sbc','dcf','graham','evmult','sotp','rnpv','liq','mna','wacc','sensitivity','industry','leaders'];
-const TITLES={dashboard:'Visual Dashboard',inputs:'All Inputs',football:'Football Field',archive:'Archive',sbc:'SBC / ΔE Analysis',dcf:'DCF Model',graham:'Graham EM',evmult:'EV Multiples',sotp:'Sum-of-the-Parts',rnpv:'rNPV Biotech',liq:'Asset Liquidation',mna:'Comparable M&A',wacc:'WACC Builder',sensitivity:'Sensitivity Analysis',industry:'Industry Setup',leaders:'Market Leaders'};
-const RENDERS={dcf:renderDCF,graham:renderGraham,evmult:renderEV,sotp:renderSOTP,rnpv:renderRNPV,liq:renderLiq,mna:renderMNA,wacc:renderWACC,sensitivity:renderSens,industry:renderIndustry,leaders:renderLeaders,football:renderFootball,archive:renderArchive,sbc:renderSBC};
+const PAGES=['dashboard','inputs','football','archive','sbc','inputsguide','dcf','graham','evmult','sotp','rnpv','liq','mna','wacc','sensitivity','industry','leaders'];
+const TITLES={dashboard:'Visual Dashboard',inputs:'All Inputs',football:'Football Field',archive:'Archive',sbc:'SBC / ΔE Analysis',inputsguide:'Inputs Guide',dcf:'DCF Model',graham:'Graham EM',evmult:'EV Multiples',sotp:'Sum-of-the-Parts',rnpv:'rNPV Biotech',liq:'Asset Liquidation',mna:'Comparable M&A',wacc:'WACC Builder',sensitivity:'Sensitivity Analysis',industry:'Industry Setup',leaders:'Market Leaders'};
+const RENDERS={dcf:renderDCF,graham:renderGraham,evmult:renderEV,sotp:renderSOTP,rnpv:renderRNPV,liq:renderLiq,mna:renderMNA,wacc:renderWACC,sensitivity:renderSens,industry:renderIndustry,leaders:renderLeaders,football:renderFootball,archive:renderArchive,sbc:renderSBC,inputsguide:renderInputsGuide};
 function nav(id){
   PAGES.forEach(p=>{$('page-'+p)?.classList.remove('active');$('nav-'+p)?.classList.remove('active');});
   $('page-'+id)?.classList.add('active');
@@ -2400,6 +2403,162 @@ function renderSBC(){
 
   ${inputTable}
   <div id="sbcResults">${hasYears?buildSBCResults():''}</div>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// INPUTS GUIDE — every input per model, source labeled
+// ─────────────────────────────────────────────────────────────────────
+function renderInputsGuide(){
+  const c=$('cnt-inputsguide');if(!c)return;
+
+  const A='<span class="pill g" style="font-size:9px;padding:2px 7px">A · GuruFocus</span>';
+  const B='<span class="pill" style="font-size:9px;padding:2px 7px;background:rgba(255,190,50,0.12);color:var(--c5);border:1px solid rgba(255,190,50,0.3)">B · Manual</span>';
+  const AB='<span class="pill c" style="font-size:9px;padding:2px 7px">A or B</span>';
+
+  function tbl(rows){
+    return `<table style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead><tr style="border-bottom:2px solid var(--b)">
+      <th style="text-align:left;padding:7px 12px;font-family:var(--fd);font-size:8px;letter-spacing:.12em;color:var(--t2);text-transform:uppercase;width:55%">Input</th>
+      <th style="text-align:left;padding:7px 12px;font-family:var(--fd);font-size:8px;letter-spacing:.12em;color:var(--t2);text-transform:uppercase;width:20%">Source</th>
+      <th style="text-align:left;padding:7px 12px;font-family:var(--fd);font-size:8px;letter-spacing:.12em;color:var(--t2);text-transform:uppercase">Note</th>
+    </tr></thead>
+    <tbody>${rows.map(([inp,src,note])=>`<tr style="border-bottom:1px solid rgba(40,120,200,0.06)">
+      <td style="padding:7px 12px;color:var(--t1);font-weight:500">${inp}</td>
+      <td style="padding:7px 12px">${src}</td>
+      <td style="padding:7px 12px;color:var(--t2);font-size:10px">${note||''}</td>
+    </tr>`).join('')}</tbody></table>`;
+  }
+
+  function section(title,subtitle,rows){
+    return `<div class="card mb">
+      <div style="margin-bottom:14px">
+        <div class="ct">${title}</div>
+        ${subtitle?`<div style="font-size:10px;color:var(--t2);margin-top:2px">${subtitle}</div>`:''}
+      </div>
+      ${tbl(rows)}
+    </div>`;
+  }
+
+  c.innerHTML=`<div>
+  <div class="ph">
+    <div class="ph-l">
+      <h1>Inputs Guide</h1>
+      <p>Every input used by each model — where it comes from and how to get it</p>
+    </div>
+    <div class="ph-r">
+      ${A} = auto-filled by GuruFocus &nbsp;&nbsp;
+      ${B} = enter manually &nbsp;&nbsp;
+      ${AB} = either
+    </div>
+  </div>
+
+  ${section('DCF Model','Discounted Cash Flow — EPS based',[
+    ['EPS TTM (Trailing Twelve Months)',A,'Base earnings per share — foundation of all projections'],
+    ['EPS Growth Rate %',A,'GuruFocus projected growth rate — verify against analyst consensus'],
+    ['Growth Years (default: 7)',B,'How many years of explicit growth to model'],
+    ['WACC / Discount Rate %',B,'Cost of capital — ideally use WACC Builder output, else industry default'],
+    ['Terminal Growth Rate %',B,'Perpetual growth rate after growth stage — typically 2–4%'],
+    ['Terminal Years (default: 10)',B,'Years in terminal stage before perpetuity calc'],
+    ['Current Price',A,'Used to calculate upside vs intrinsic value'],
+    ['Tax Rate %',AB,'Used in some WACC calculations — GF has it, also in All Inputs'],
+  ])}
+
+  ${section('Graham Earnings Multiple','Benjamin Graham intrinsic value formula',[
+    ['EPS TTM',A,'Same as DCF — trailing earnings per share'],
+    ['Forward EPS',A,'Next twelve months projected EPS'],
+    ['Graham Growth Multiple (default: 2×)',B,'Graham\'s original formula uses 2× EPS growth — adjustable'],
+    ['Graham PE Multiplier (default: 1.5×)',B,'Graham used 1.5× growth rate as no-growth PE base'],
+    ['EPS Growth Rate %',A,'Same growth rate used in DCF'],
+    ['Risk-Free Rate %',B,'10-yr Treasury yield — used in Graham\'s adjusted formula'],
+    ['Current Price',A,'For margin of safety calculation'],
+  ])}
+
+  ${section('EV / EBITDA Multiples','Enterprise value based relative valuation',[
+    ['Revenue (LTM)',A,'Last twelve months revenue'],
+    ['EBITDA (LTM)',A,'Earnings before interest, tax, depreciation, amortisation'],
+    ['EBITDA Margin %',A,'Calculated from above — auto'],
+    ['Net Income',A,'For NI-based multiple'],
+    ['Free Cash Flow',A,'For FCF yield and FCF multiple'],
+    ['Shares Outstanding',A,'To convert EV → per share value'],
+    ['Total Debt',A,'For EV calculation (Mkt Cap + Debt - Cash)'],
+    ['Cash & Equivalents',A,'For EV calculation'],
+    ['Industry EV/EBITDA Multiple',B,'Set in Industry Setup — benchmark multiple for your sector'],
+    ['Industry PE Multiple',B,'Set in Industry Setup'],
+    ['Current Price',A,'Market cap calculation'],
+  ])}
+
+  ${section('Sum of the Parts (SOTP)','Individual segment valuation',[
+    ['Segment Names',B,'Enter manually — not available via API'],
+    ['Segment Revenue / EBITDA',B,'Enter manually per segment'],
+    ['Segment EV Multiple',B,'Your assumed exit multiple per segment'],
+    ['Total Debt',A,'Deducted from enterprise value'],
+    ['Cash',A,'Added back to get equity value'],
+    ['Shares Outstanding',A,'To convert to per share'],
+  ])}
+
+  ${section('Graham EM — Comparable M&A','Precedent transaction benchmarking',[
+    ['Revenue (LTM)',A,'Target company revenue'],
+    ['EBITDA (LTM)',A,'Target company EBITDA'],
+    ['Net Income',A,'Target company NI'],
+    ['M&A EV/Revenue Multiple',B,'From comparable transactions — set in Industry Setup'],
+    ['M&A EV/EBITDA Multiple',B,'From comparable transactions — set in Industry Setup'],
+    ['M&A PE Multiple',B,'From comparable transactions'],
+    ['Control Premium %',B,'Typical acquisition premium — default 25–30%'],
+    ['Total Debt',A,'For equity bridge'],
+    ['Cash',A,'For equity bridge'],
+    ['Shares Outstanding',A,'For per share value'],
+  ])}
+
+  ${section('rNPV Biotech','Risk-adjusted NPV for pipeline assets',[
+    ['Asset Name',B,'Pipeline drug / program name'],
+    ['Peak Revenue ($M)',B,'Your projected peak annual revenue if approved'],
+    ['Probability of Success %',B,'Clinical success probability — Phase I ~10%, Phase III ~60%'],
+    ['Years to Launch',B,'Expected years until commercialisation'],
+    ['Revenue Multiple',B,'EV/Revenue multiple at peak — biotech typically 3–8×'],
+    ['WACC / Discount Rate',B,'Same as DCF — typically higher for biotech (12–15%)'],
+    ['Net Cash',AB,'GF has cash/debt; net cash adds to rNPV equity value'],
+  ])}
+
+  ${section('Asset Liquidation','Distressed / break-up value',[
+    ['Total Assets',A,'Book value of all assets'],
+    ['Total Liabilities',A,'All obligations — deducted from assets'],
+    ['Asset Recovery Rate %',B,'Typical range: 50–80% for going concern, lower for distressed'],
+    ['Shares Outstanding',A,'To convert to per share'],
+  ])}
+
+  ${section('WACC Builder','Weighted average cost of capital calculation',[
+    ['Beta',AB,'GF has beta — or enter manually from Bloomberg/Yahoo'],
+    ['Risk-Free Rate %',B,'10-yr US Treasury yield — update manually'],
+    ['Equity Risk Premium %',B,'Damodaran ERP — typically 4.5–5.5%'],
+    ['Cost of Debt (pre-tax) %',AB,'GF has interest expense / debt — or enter manually'],
+    ['Tax Rate %',AB,'GF has effective tax rate'],
+    ['Total Debt ($M)',A,'From GuruFocus balance sheet'],
+    ['Market Cap ($M)',A,'Price × shares — auto calculated'],
+    ['Shares Outstanding',A,'From GuruFocus'],
+  ])}
+
+  ${section('Sensitivity Analysis','How intrinsic value changes with key assumptions',[
+    ['WACC range',B,'You set the axis range — e.g. 8% to 13%'],
+    ['Growth Rate range',B,'You set the axis range — e.g. 10% to 30%'],
+    ['Base DCF Value',A,'Auto — pulled from DCF model output'],
+  ])}
+
+  ${section('SBC / ΔE Analysis','Burry Owners\' Earnings Framework',[
+    ['Net Income (per year)',A,'From GuruFocus financials — auto-filled'],
+    ['GAAP SBC Expense (per year)',A,'From GuruFocus — Stock Based Compensation line'],
+    ['Shares Outstanding Start / End',A,'From GuruFocus — annual shares data'],
+    ['Buyback Spend ($M per year)',A,'From GuruFocus — Repurchase of Stock'],
+    ['Buyback Share Count (M per year)',B,'NOT in GuruFocus — from 10-K equity footnote OR 10-K PDF upload'],
+    ['Tax Withholding Cash ($M per year)',B,'NOT in GuruFocus — from 10-K Financing Activities (net share settlement line)'],
+  ])}
+
+  ${section('Market Leaders Comparison','Peer group benchmarking',[
+    ['Leader Tickers (up to 3)',B,'You choose which peers to compare — set in All Inputs'],
+    ['All leader financials',A,'Auto-fetched from GuruFocus when you hit GET'],
+    ['Industry averages',B,'Set manually in Industry Setup'],
+  ])}
+
   </div>`;
 }
 
