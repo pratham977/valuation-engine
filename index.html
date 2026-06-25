@@ -1947,48 +1947,112 @@ async function fetchSBCData(){
   }
 }
 
+// Stores source evidence from last 10-K parse
+let _10kEvidence=[];
+
 async function parse10K(file){
   const btn=$('sbcPdfBtn');
   if(btn){btn.textContent='Reading PDF…';btn.disabled=true;}
+  _10kEvidence=[];
   try{
-    const base64=await new Promise((res,rej)=>{
+    if(typeof pdfjsLib==='undefined'){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        s.onload=res;s.onerror=rej;
+        document.head.appendChild(s);
+      });
+      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    const arrayBuf=await new Promise((res,rej)=>{
       const r=new FileReader();
-      r.onload=()=>res(r.result.split(',')[1]);
+      r.onload=()=>res(r.result);
       r.onerror=()=>rej(new Error('File read failed'));
-      r.readAsDataURL(file);
+      r.readAsArrayBuffer(file);
     });
-    const yearsCtx=S.sbcYears.length?`Known fiscal years in our data: ${S.sbcYears.map(y=>y.yr).join(', ')}.`:'';
-    const prompt=`You are a financial analyst extracting specific data from a 10-K annual report.${yearsCtx}
-
-From the Consolidated Statement of Cash Flows, extract for EACH fiscal year:
-1. BUYBACK SHARES: shares repurchased in millions (look for "Repurchases of common stock", "Treasury stock" — find the SHARE COUNT not just dollar amount)
-2. TAX WITHHOLDING: cash paid for tax withholding on SBC vesting, in $millions (look in Financing Activities for "Taxes paid related to net share settlement", "Tax withholding payments on vesting", "Net payments related to SBC award activities")
-
-Return ONLY a JSON array, no other text:
-[{"year":"2024","buybackShares":1.23,"taxWithholding":456.7}]
-buybackShares in millions of shares. taxWithholding in $millions. Use null if not found.`;
-
-    const resp=await fetch('https://ve-proxy.onrender.com/parse-10k',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({pdfBase64:base64,prompt})
-    });
-    if(!resp.ok)throw new Error(`API ${resp.status}`);
-    const data=await resp.json();
-    const text=data.text||'';
-    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    if(btn)btn.textContent='Extracting text…';
+    const pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
+    window._10kPdf=pdf;
+    window._10kPageCache={};
+    const pages=[];
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const content=await page.getTextContent();
+      pages.push({pageNum:i,text:content.items.map(it=>it.str).join(' ')});
+    }
+    if(btn)btn.textContent='Finding patterns…';
+    function extractNum(str){
+      if(!str)return null;
+      const clean=str.replace(/,/g,'').trim();
+      const neg=clean.startsWith('(')&&clean.endsWith(')');
+      const num=parseFloat(clean.replace(/[()$BMK]/gi,''));
+      if(isNaN(num))return null;
+      const mult=clean.match(/B/i)?1000:clean.match(/K/i)?0.001:1;
+      return (neg?-num:num)*mult;
+    }
+    const taxPatterns=[
+      /taxes paid related to net share settlement[^.]{0,300}/gi,
+      /tax withholding[^.]{0,200}/gi,
+      /net share settlement[^.]{0,200}/gi,
+      /payments for taxes related to[^.]{0,200}/gi,
+      /employee taxes paid[^.]{0,200}/gi,
+      /payment[s]? of employee taxes[^.]{0,200}/gi,
+      /withholding tax[^.]{0,200}/gi,
+    ];
+    const buybackPatterns=[
+      /repurchase[s]? of common stock[^.]{0,200}/gi,
+      /common stock repurchase[s]?[^.]{0,200}/gi,
+      /treasury stock[^.]{0,200}/gi,
+      /share repurchase[s]?[^.]{0,200}/gi,
+    ];
+    const cfPages=pages.filter(p=>/cash flow/i.test(p.text)||/financing activit/i.test(p.text));
+    const searchPages=cfPages.length?cfPages:pages;
+    function findWithPage(patterns,pagesArr){
+      const results=[];
+      for(const pg of pagesArr){
+        for(const pat of patterns){
+          pat.lastIndex=0;
+          for(const m of [...pg.text.matchAll(pat)]){
+            const snippet=m[0];
+            for(const nm of [...snippet.matchAll(/\(?([\d,]+\.?\d*)\)?/g)]){
+              const n=extractNum(nm[0]);
+              if(n!=null&&Math.abs(n)>0&&Math.abs(n)<50000)
+                results.push({value:Math.abs(n),pageNum:pg.pageNum,snippet:snippet.slice(0,120)});
+            }
+          }
+        }
+      }
+      return results;
+    }
+    const taxResults=findWithPage(taxPatterns,searchPages);
+    const buybackResults=findWithPage(buybackPatterns,searchPages);
+    console.log('[10K] Tax:',taxResults,'Buyback:',buybackResults);
+    const ourYears=S.sbcYears.map(y=>String(y.yr)).slice(-3);
     let matched=0;
-    parsed.forEach(row=>{
-      const existing=S.sbcYears.find(y=>String(y.yr)===String(row.year));
-      if(existing){
-        if(row.buybackShares!=null)existing.buybackShares=row.buybackShares;
-        if(row.taxWithholding!=null)existing.taxWithholding=row.taxWithholding;
+    ourYears.forEach((yr,i)=>{
+      const existing=S.sbcYears.find(y=>String(y.yr)===yr);
+      if(!existing)return;
+      const tw=taxResults[i]??taxResults[0]??null;
+      const bb=buybackResults[i]??null;
+      if(tw&&tw.value>0&&tw.value<50000){
+        existing.taxWithholding=tw.value;
+        _10kEvidence.push({field:'Tax Withholding',year:yr,value:tw.value,pageNum:tw.pageNum,snippet:tw.snippet});
         matched++;
       }
+      if(bb&&bb.value>0&&bb.value<500){
+        existing.buybackShares=bb.value;
+        _10kEvidence.push({field:'Buyback Shares',year:yr,value:bb.value,pageNum:bb.pageNum,snippet:bb.snippet});
+      }
     });
-    recalcAll();
-    if(_curPage==='sbc')renderSBC();
-    toast(`10-K parsed — filled ${matched} year(s)`,'ok');
+    const srcBtn=$('sbcSourceBtn');
+    if(srcBtn)srcBtn.style.display=_10kEvidence.length?'inline-flex':'none';
+    if(matched===0){
+      toast(`PDF read (${pdf.numPages} pages) — patterns not found. Enter manually.`,'');
+    } else {
+      recalcAll();
+      if(_curPage==='sbc')renderSBC();
+      toast(`10-K parsed — ${matched} year(s) filled. Click "View Source" to verify.`,'ok');
+    }
   }catch(e){
     toast(`10-K parse failed: ${e.message}`,'err');
     console.error('[10K PARSE]',e);
@@ -1996,6 +2060,75 @@ buybackShares in millions of shares. taxWithholding in $millions. Use null if no
     if(btn){btn.textContent='📄 Upload 10-K PDF';btn.disabled=false;}
   }
 }
+
+async function renderPdfPage(pageNum){
+  if(window._10kPageCache&&window._10kPageCache[pageNum])return window._10kPageCache[pageNum];
+  if(!window._10kPdf)return null;
+  try{
+    const page=await window._10kPdf.getPage(pageNum);
+    const vp=page.getViewport({scale:1.5});
+    const canvas=document.createElement('canvas');
+    canvas.width=vp.width;canvas.height=vp.height;
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+    if(!window._10kPageCache)window._10kPageCache={};
+    window._10kPageCache[pageNum]=canvas.toDataURL();
+    return window._10kPageCache[pageNum];
+  }catch(e){return null;}
+}
+
+async function show10KSource(){
+  if(!_10kEvidence.length){toast('Upload a 10-K PDF first','err');return;}
+  let modal=$('tenKModal');
+  if(modal)modal.remove();
+  modal=document.createElement('div');
+  modal.id='tenKModal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;flex-direction:column;font-family:var(--fb)';
+  modal.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--sur2);border-bottom:1px solid var(--b);flex-shrink:0">
+      <div style="font-family:var(--fd);font-weight:700;color:var(--t1);letter-spacing:.06em;font-size:13px">10-K SOURCE VERIFICATION</div>
+      <button onclick="document.getElementById('tenKModal').remove()" style="background:transparent;border:1px solid var(--b);color:var(--t2);border-radius:5px;padding:4px 14px;cursor:pointer;font-size:12px">✕ Close</button>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden">
+      <div style="width:300px;border-right:1px solid var(--b);overflow-y:auto;padding:12px;background:var(--sur);flex-shrink:0">
+        <div style="font-family:var(--fd);font-size:8px;letter-spacing:.12em;color:var(--t2);text-transform:uppercase;margin-bottom:10px">Extracted Values — click to verify</div>
+        ${_10kEvidence.map((e,i)=>`
+          <div id="evCard${i}" onclick="loadEvidencePage(${i})" style="background:var(--sur2);border:1px solid var(--b);border-radius:6px;padding:10px 12px;margin-bottom:8px;cursor:pointer">
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+              <span style="font-family:var(--fd);font-size:9px;letter-spacing:.08em;color:var(--c2);text-transform:uppercase">${e.field}</span>
+              <span style="font-family:var(--fd);font-size:9px;color:var(--t2)">Year ${e.year}</span>
+            </div>
+            <div style="font-family:var(--fm);font-size:14px;font-weight:700;color:var(--t1);margin-bottom:4px">$${e.value.toFixed(1)}M</div>
+            <div style="font-size:9px;color:var(--t2);line-height:1.4;font-style:italic">"${e.snippet.slice(0,80).replace(/"/g,"'")}…"</div>
+            <div style="margin-top:5px;font-size:9px;color:var(--c1)">📄 Page ${e.pageNum}</div>
+          </div>`).join('')}
+      </div>
+      <div id="pdfViewer" style="flex:1;overflow-y:auto;padding:24px;background:var(--bg);display:flex;flex-direction:column;align-items:center">
+        <div style="color:var(--t2);font-size:12px;margin-top:80px">← Click an extracted value to view its source page</div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function loadEvidencePage(idx){
+  const e=_10kEvidence[idx];
+  _10kEvidence.forEach((_,i)=>{
+    const c=$(`evCard${i}`);
+    if(c)c.style.borderColor=i===idx?'var(--c1)':'var(--b)';
+  });
+  const viewer=$('pdfViewer');
+  if(!viewer)return;
+  viewer.innerHTML=`<div style="color:var(--t2);font-size:12px;margin-top:80px">Rendering page ${e.pageNum}…</div>`;
+  const dataUrl=await renderPdfPage(e.pageNum);
+  if(!dataUrl){viewer.innerHTML=`<div style="color:var(--c6);font-size:12px;margin-top:80px">Could not render page ${e.pageNum}</div>`;return;}
+  viewer.innerHTML=`
+    <div style="margin-bottom:10px;font-family:var(--fd);font-size:9px;letter-spacing:.1em;color:var(--t2);text-transform:uppercase">Page ${e.pageNum} · ${e.field} · Year ${e.year} · $${e.value.toFixed(1)}M</div>
+    <div style="background:var(--sur2);border:1px solid var(--b);border-radius:6px;padding:12px;margin-bottom:14px;max-width:700px;width:100%">
+      <div style="font-size:9px;color:var(--t2);margin-bottom:4px;font-family:var(--fd);letter-spacing:.08em;text-transform:uppercase">Matched Text</div>
+      <div style="font-size:11px;color:var(--c5);font-style:italic;line-height:1.6">"${e.snippet.replace(/"/g,"'")}"</div>
+    </div>
+    <img src="${dataUrl}" style="max-width:100%;border:1px solid var(--b);border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.4)">`;
+}
+
 
 function sbcFieldChange(yr,field,val){
   const y=S.sbcYears.find(y=>String(y.yr)===String(yr));
@@ -2091,6 +2224,7 @@ function renderSBC(){
     <div class="ph-r" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="btn sm ghost" id="sbcFetchBtn" onclick="fetchSBCData()">↻ Auto-fill from GuruFocus</button>
       <label class="btn sm ghost" style="cursor:pointer" id="sbcPdfBtn">📄 Upload 10-K PDF<input type="file" accept=".pdf" style="display:none" onchange="if(this.files[0])parse10K(this.files[0])"></label>
+      <button class="btn sm ghost" id="sbcSourceBtn" onclick="show10KSource()" style="display:none;color:var(--c1);border-color:rgba(30,150,255,0.3)">🔍 View Source Pages</button>
       <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=10-K&dateb=&owner=include&count=5&company=${encodeURIComponent(S.ticker||'')}" target="_blank" class="btn sm ghost" style="text-decoration:none">🔗 SEC EDGAR 10-K</a>
     </div>
   </div>
