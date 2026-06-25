@@ -1998,15 +1998,31 @@ async function parse10K(file){
       /employee taxes paid[^.]{0,200}/gi,
       /payment[s]? of employee taxes[^.]{0,200}/gi,
       /withholding tax[^.]{0,200}/gi,
+      /shares withheld for tax[^.]{0,300}/gi,
+      /employee shares withheld[^.]{0,300}/gi,
+      /withheld for tax obligations[^.]{0,300}/gi,
+      /tax obligation[s]?[^.]{0,200}/gi,
     ];
     const buybackPatterns=[
       /repurchase[s]? of common stock[^.]{0,200}/gi,
       /common stock repurchase[s]?[^.]{0,200}/gi,
       /treasury stock[^.]{0,200}/gi,
       /share repurchase[s]?[^.]{0,200}/gi,
+      /purchases of treasury stock[^.]{0,300}/gi,
+      /purchase[s]? of common stock[^.]{0,200}/gi,
     ];
     const cfPages=pages.filter(p=>/cash flow/i.test(p.text)||/financing activit/i.test(p.text));
     const searchPages=cfPages.length?cfPages:pages;
+
+    // Try to detect year order from cash flow statement header
+    // Most 10-Ks show "Year Ended December 31, 2025 2024 2023" 
+    let cfYearOrder=[];
+    for(const pg of searchPages){
+      const yrMatch=pg.text.match(/(?:year ended|fiscal year)[^0-9]{0,30}(20\d{2})[^0-9]{0,10}(20\d{2})[^0-9]{0,10}(20\d{2})/i);
+      if(yrMatch){cfYearOrder=[yrMatch[1],yrMatch[2],yrMatch[3]];break;}
+    }
+    // Fall back to our known years if not detected
+    if(!cfYearOrder.length)cfYearOrder=S.sbcYears.map(y=>String(y.yr)).slice(-3).reverse();
     function findWithPage(patterns,pagesArr){
       const results=[];
       for(const pg of pagesArr){
@@ -2027,7 +2043,7 @@ async function parse10K(file){
     const taxResults=findWithPage(taxPatterns,searchPages);
     const buybackResults=findWithPage(buybackPatterns,searchPages);
     console.log('[10K] Tax:',taxResults,'Buyback:',buybackResults);
-    const ourYears=S.sbcYears.map(y=>String(y.yr)).slice(-3);
+    const ourYears=cfYearOrder.length?cfYearOrder:S.sbcYears.map(y=>String(y.yr)).slice(-3).reverse();
     let matched=0;
     ourYears.forEach((yr,i)=>{
       const existing=S.sbcYears.find(y=>String(y.yr)===yr);
