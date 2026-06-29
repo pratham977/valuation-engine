@@ -381,9 +381,7 @@ canvas{max-width:100%}
     <div class="nav-item" id="nav-sotp" onclick="nav('sotp')">
       <span class="nav-ic">⊹</span>SOTP<span class="nav-val" id="nv-sotp">—</span>
     </div>
-    <div class="nav-item" id="nav-rnpv" onclick="nav('rnpv')">
-      <span class="nav-ic">⚗</span>rNPV Biotech<span class="nav-val" id="nv-rnpv">—</span>
-    </div>
+
     <div class="nav-item" id="nav-liq" onclick="nav('liq')">
       <span class="nav-ic">⬡</span>Liquidation<span class="nav-val" id="nv-liq">—</span>
     </div>
@@ -544,6 +542,7 @@ canvas{max-width:100%}
           <div style="display:flex;flex-direction:column;justify-content:center;gap:10px" id="dashSpiderLegend"></div>
         </div>
       </div>
+      <div id="cnt-dash-formulas"></div>
 
     </div><!-- /page-dashboard -->
 
@@ -660,7 +659,6 @@ canvas{max-width:100%}
     <div class="page" id="page-graham"><div id="cnt-graham"></div></div>
     <div class="page" id="page-evmult"><div id="cnt-evmult"></div></div>
     <div class="page" id="page-sotp"><div id="cnt-sotp"></div></div>
-    <div class="page" id="page-rnpv"><div id="cnt-rnpv"></div></div>
     <div class="page" id="page-liq"><div id="cnt-liq"></div></div>
     <div class="page" id="page-mna"><div id="cnt-mna"></div></div>
     <div class="page" id="page-wacc"><div id="cnt-wacc"></div></div>
@@ -726,6 +724,21 @@ const clr=v=>v>10?'var(--c2)':v>0?'var(--c5)':v<0?'var(--c6)':'var(--t2)';
 const pillClass=v=>v>10?'g':v>0?'gold':v<0?'r':'';
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+function formulaBox(formulas){
+  return `<div class="card mb" style="border-left:3px solid var(--c1);padding:16px 20px;margin-top:16px">
+    <div style="font-family:var(--fd);font-size:8px;letter-spacing:.14em;color:var(--t2);text-transform:uppercase;margin-bottom:14px">Formula Reference</div>
+    <div style="display:flex;flex-direction:column;gap:0">
+      ${formulas.map((f,i)=>`<div style="display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start;padding:10px 0;${i<formulas.length-1?'border-bottom:1px solid rgba(40,120,200,0.06)':''}">
+        <div>
+          <div style="font-family:var(--fd);font-size:9px;letter-spacing:.08em;color:var(--t2);text-transform:uppercase;margin-bottom:4px">${f.name}</div>
+          <div style="font-family:var(--fm);font-size:13px;color:var(--c1);line-height:1.5">${f.formula}</div>
+        </div>
+        <div style="font-size:11px;color:var(--t2);line-height:1.7;padding-top:2px">${f.desc}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // STORAGE — shared data lives in Firebase Firestore (visible to anyone
 // with the link), so this is what powers the cross-user Archive and
@@ -776,9 +789,9 @@ function toast(msg,type='',dur=3200){
 // ─────────────────────────────────────────────────────────────────────
 // NAV
 // ─────────────────────────────────────────────────────────────────────
-const PAGES=['dashboard','inputs','football','archive','sbc','inputsguide','dcf','graham','evmult','sotp','rnpv','liq','mna','wacc','sensitivity','industry','leaders'];
-const TITLES={dashboard:'Visual Dashboard',inputs:'All Inputs',football:'Football Field',archive:'Archive',sbc:'SBC / ΔE Analysis',inputsguide:'Inputs Guide',dcf:'DCF Model',graham:'Graham EM',evmult:'EV Multiples',sotp:'Sum-of-the-Parts',rnpv:'rNPV Biotech',liq:'Asset Liquidation',mna:'Comparable M&A',wacc:'WACC Builder',sensitivity:'Sensitivity Analysis',industry:'Industry Setup',leaders:'Market Leaders'};
-const RENDERS={dcf:renderDCF,graham:renderGraham,evmult:renderEV,sotp:renderSOTP,rnpv:renderRNPV,liq:renderLiq,mna:renderMNA,wacc:renderWACC,sensitivity:renderSens,industry:renderIndustry,leaders:renderLeaders,football:renderFootball,archive:renderArchive,sbc:renderSBC,inputsguide:renderInputsGuide};
+const PAGES=['dashboard','inputs','football','archive','sbc','inputsguide','dcf','graham','evmult','sotp','liq','mna','wacc','sensitivity','industry','leaders'];
+const TITLES={dashboard:'Visual Dashboard',inputs:'All Inputs',football:'Football Field',archive:'Archive',sbc:'SBC / ΔE Analysis',inputsguide:'Inputs Guide',dcf:'DCF Model',graham:'Graham EM',evmult:'EV Multiples',sotp:'Sum-of-the-Parts',liq:'Asset Liquidation',mna:'Comparable M&A',wacc:'WACC Builder',sensitivity:'Sensitivity Analysis',industry:'Industry Setup',leaders:'Market Leaders'};
+const RENDERS={dcf:renderDCF,graham:renderGraham,evmult:renderEV,sotp:renderSOTP,liq:renderLiq,mna:renderMNA,wacc:renderWACC,sensitivity:renderSens,industry:renderIndustry,leaders:renderLeaders,football:renderFootball,archive:renderArchive,sbc:renderSBC,inputsguide:renderInputsGuide};
 function nav(id){
   PAGES.forEach(p=>{$('page-'+p)?.classList.remove('active');$('nav-'+p)?.classList.remove('active');});
   $('page-'+id)?.classList.add('active');
@@ -852,16 +865,7 @@ function recalcAll(){
   V.sotp=V.evmult>0?V.evmult*1.05:0;
   V.liquidation=S.assets>0?Math.max(0,(S.assets*0.6-S.liab)/Math.max(S.shares,1)):0;
   V.mna=S.tbv>0?S.tbv*1.5:S.eps>0?S.eps*12:0;
-  V.rnpv=(()=>{
-    // Read from actual rNPV pipeline — populated when rNPV page is rendered
-    // Falls back to FCF-based rough estimate if pipeline not yet loaded
-    if(window._rnpvDrugs&&window._rnpvDrugs.length){
-      const totalRnpv=window._rnpvDrugs.reduce((a,d)=>a+(d.rnpv||0),0);
-      const netCash=Math.max(0,(S.cash||0)-(S.debt||0));
-      return S.shares>0?(totalRnpv+netCash)/S.shares:0;
-    }
-    return 0; // shows — until user visits rNPV page
-  })();
+
   // Leaders derived
   S.leaders.forEach(l=>{
     l.pe=l.price>0&&l.eps>0?l.price/l.eps:null;
@@ -884,7 +888,7 @@ function recalcAll(){
   V.sbcAdjPEFwd=V.sbcAdjEPSFwd&&S.price?S.price/V.sbcAdjEPSFwd:null;
   set('nv-sbc',V.deltaE!=null?pct(V.deltaE*100):'—');
   // Nav badges
-  const nb=[['dcf',V.dcf],['graham',V.graham],['evmult',V.evmult],['sotp',V.sotp],['rnpv',V.rnpv],['liq',V.liquidation],['mna',V.mna]];
+  const nb=[['dcf',V.dcf],['graham',V.graham],['evmult',V.evmult],['sotp',V.sotp],['liq',V.liquidation],['mna',V.mna]];
   nb.forEach(([k,v])=>{const e=$('nv-'+k);if(e)e.textContent=v>0?f(v,'—'):' —';});
   // Topbar
   set('tbTicker',S.ticker||'TICK');
@@ -912,7 +916,6 @@ const METHODS=[
   {key:'graham',name:'Graham EM (avg 2×/1.5×)',c:CL.p},
   {key:'evmult',name:'EV/EBITDA Multiples',c:CL.g},
   {key:'sotp',name:'SOTP',c:CL.gold},
-  {key:'rnpv',name:'rNPV Biotech',c:CL.p},
   {key:'liq',name:'Asset Liquidation',c:CL.r},
   {key:'mna',name:'Comparable M&A',c:CL.g},
 ];
@@ -961,6 +964,20 @@ function renderDashboard(){
   renderDashMargins();
   renderDashIncome();
   renderDashSpider();
+  // Formula box
+  const dashF=$('cnt-dash-formulas');
+  if(dashF)dashF.innerHTML=formulaBox([
+    {name:'Market Cap',formula:'Price × Shares Outstanding',desc:'Total equity value at current market price.'},
+    {name:'Enterprise Value',formula:'Market Cap + Total Debt − Cash',desc:'Total firm value — what an acquirer would effectively pay including net debt.'},
+    {name:'Avg Intrinsic Value',formula:'Σ(Model Values) ÷ N models',desc:'Simple average of all models with valid outputs (DCF, Graham, EV, SOTP, Liquidation, M&A).'},
+    {name:'Margin of Safety',formula:'(Avg IV − Price) ÷ Price × 100%',desc:'How much upside vs downside exists. Graham required 33%+ before buying.'},
+    {name:'Low / High Range',formula:'Base Value × 0.85 / × 1.15',desc:'Bear and bull case — ±15% around each model\'s base case value.'},
+    {name:'EV / EBITDA',formula:'EV ÷ EBITDA',desc:'Most widely used valuation multiple. Compare vs industry average.'},
+    {name:'Trailing P/E',formula:'Price ÷ EPS TTM',desc:'Current price divided by last twelve months earnings per share.'},
+    {name:'Forward P/E',formula:'Price ÷ Forward EPS',desc:'Current price divided by next twelve months consensus EPS estimate.'},
+    {name:'EBITDA Margin',formula:'EBITDA ÷ Revenue × 100%',desc:'Operating profitability before financing and non-cash charges.'},
+    {name:'Spider Normalisation',formula:'(Company Value ÷ Max(Co, Ind)) × 100',desc:'Each spider axis is scaled to 100 = the higher of company or industry — shows relative strength visually.'},
+  ]);
 }
 
 function renderGauge(mos){
@@ -1188,6 +1205,17 @@ function renderDCF(){
     <div class="card"><div class="ct"><span class="d gold"></span>EPS Growth Ranking</div>
     ${buildRankBars('EPS Growth',[{label:S.ticker||'You',val:S.epsG,isYou:true,fmt:fP},...S.leaders.map(l=>({label:l.tick,val:S.epsG,fmt:fP}))])}</div>
   </div>`);
+
+  const el=document.getElementById('cnt-dcf');
+  if(el)el.insertAdjacentHTML('beforeend',formulaBox([
+    {name:'EPS Year N',formula:'EPS₀ × (1 + g)ⁿ',desc:'Each year\'s projected EPS compounded at growth rate g from base EPS₀.'},
+    {name:'PV of Year N',formula:'EPSₙ ÷ (1 + WACC)ⁿ',desc:'Present value of each year\'s EPS discounted back to today using WACC as the discount rate.'},
+    {name:'Growth Stage PV',formula:'Σ PV(EPSₙ) for n=1 to N',desc:'Sum of discounted EPS values during the explicit growth period (default: years 1–7).'},
+    {name:'Terminal Value',formula:'EPS_N × (1 + gₜ) ÷ (WACC − gₜ)',desc:'Gordon Growth Model perpetuity at end of growth stage. gₜ = terminal growth rate (default 4%).'},
+    {name:'Terminal PV',formula:'TV ÷ (1 + WACC)ᴺ',desc:'Terminal value discounted back to today from year N.'},
+    {name:'DCF Intrinsic Value',formula:'Growth Stage PV + Terminal PV',desc:'Total per-share intrinsic value — sum of explicitly modelled years plus terminal value.'},
+    {name:'Margin of Safety',formula:'(IV − Price) ÷ Price × 100',desc:'Upside between current market price and calculated intrinsic value.'},
+  ]));
   requestAnimationFrame(()=>setTimeout(()=>{
     mkChart('dcfBarCh',{type:'bar',data:{labels:sched.map(s=>s.yr),datasets:[{data:sched.map(s=>s.pv),backgroundColor:sched.map(s=>s.s==='G'?CL.c+'88':CL.p+'88'),borderColor:sched.map(s=>s.s==='G'?CL.c:CL.p),borderWidth:1,borderRadius:3}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`Yr ${ctx.label}: ${f(ctx.raw)}`}}},
@@ -1258,6 +1286,15 @@ function renderGraham(){
     <div class="card"><div class="ct"><span class="d gold"></span>Margin of Safety — 1.5× Ranking</div>
     ${buildRankBars('MoS 1.5%',[{label:S.ticker||'You',val:mos15||0,isYou:true,fmt:pct},...S.leaders.map(l=>{const lm=l.price>0&&l.grahamVal15?(l.grahamVal15-l.price)/l.price*100:0;return{label:l.tick,val:lm,fmt:pct};})])}</div>
   </div>`);
+
+  const elg=document.getElementById('cnt-graham');
+  if(elg)elg.insertAdjacentHTML('beforeend',formulaBox([
+    {name:'Graham IV (2×)',formula:'EPS × (8.5 + 2g)',desc:'Original Graham formula. 8.5 = P/E for no-growth company. 2× multiplier on 5-yr EPS growth rate g.'},
+    {name:'Graham IV (1.5×)',formula:'EPS × (8.5 + 1.5g)',desc:'Conservative variant — 1.5× growth multiplier. Better for lower-certainty growth forecasts.'},
+    {name:'Graham Yield-Adjusted',formula:'V × (4.4 ÷ AAA_yield)',desc:'Graham\'s interest rate adjustment — higher rates compress value, lower rates expand it.'},
+    {name:'Consensus Graham',formula:'(V_2× + V_1.5×) ÷ 2',desc:'Average of both multiplier variants — used as the headline Graham value in this model.'},
+    {name:'Margin of Safety',formula:'(V − Price) ÷ Price × 100',desc:'Graham required at least 33% MoS before buying. Below 0% = overvalued vs Graham formula.'},
+  ]));
   requestAnimationFrame(()=>setTimeout(()=>{
     mkChart('grahamBarCh',{type:'bar',data:{
       labels:['Base P/E × EPS','Growth Prem (2×)','Growth Prem (1.5×)','IV — 2×','IV — 1.5×','Current Price'],
@@ -1311,6 +1348,15 @@ function renderEV(){
     <div class="card"><div class="ct"><span class="d p"></span>EBITDA Margin Ranking (higher = better)</div>
     ${buildRankBars('EBITDA Margin',[{label:S.ticker||'You',val:V.em||0,isYou:true,fmt:fP},...S.leaders.map(l=>({label:l.tick,val:l.em||0,fmt:fP}))])}</div>
   </div>`);
+
+  const elev=document.getElementById('cnt-evmult');
+  if(elev)elev.insertAdjacentHTML('beforeend',formulaBox([
+    {name:'Enterprise Value',formula:'Mkt Cap + Total Debt − Cash',desc:'Total firm value regardless of capital structure. Represents what an acquirer would effectively pay.'},
+    {name:'EV / EBITDA',formula:'EV ÷ EBITDA',desc:'Most widely used institutional multiple. Less affected by depreciation policy than P/E. Compare vs industry.'},
+    {name:'EV / Revenue',formula:'EV ÷ Revenue',desc:'Used for high-growth or pre-profit companies. Less meaningful for mature businesses.'},
+    {name:'Implied Share Price',formula:'(Industry Mult × EBITDA − Debt + Cash) ÷ Shares',desc:'Apply the industry EV/EBITDA multiple to get implied per-share value.'},
+    {name:'P/E Ratio',formula:'Price ÷ EPS',desc:'Trailing P/E uses LTM EPS. Forward P/E uses next year consensus estimate.'},
+  ]));
   requestAnimationFrame(()=>setTimeout(()=>{
     mkChart('evBarCh',{type:'bar',data:{labels:['EV/Revenue','EV/EBITDA','P/E'],datasets:[
       {label:S.ticker||'Co.',data:[V.evr||0,V.eve||0,V.pe||0],backgroundColor:CL.c+'77',borderColor:CL.c,borderWidth:1.5,borderRadius:4},
@@ -1370,86 +1416,20 @@ function renderSOTP(){
   ${buildRankBars('EBITDA Margin',[{label:S.ticker||'You',val:V.em||0,isYou:true,fmt:fP},...S.leaders.map(l=>({label:l.tick,val:l.em||0,fmt:fP}))])}</div>
   </div>`;
   renderSOTPSegs();
+
+  const elso=document.getElementById('cnt-sotp');
+  if(elso)elso.insertAdjacentHTML('beforeend',formulaBox([
+    {name:'Segment EV',formula:'Segment EBITDA × EV/EBITDA Multiple',desc:'Each business segment valued independently using the appropriate sector multiple.'},
+    {name:'Total Enterprise Value',formula:'Σ (Segment EV)',desc:'Sum of all segment valuations. Each segment can use a different multiple reflecting its sector.'},
+    {name:'Equity Value',formula:'Total EV − Net Debt',desc:'Subtract net debt (total debt minus cash) from enterprise value to get equity value.'},
+    {name:'SOTP Per Share',formula:'Equity Value ÷ Shares Outstanding',desc:'Divide equity value by diluted shares to get per-share intrinsic value.'},
+  ]));
   requestAnimationFrame(()=>setTimeout(()=>{mkChart('sotpPieCh',{type:'doughnut',data:{labels:window._sotpSegs.map(s=>s.name),datasets:[{data:window._sotpSegs.map(s=>(s.val||0)*s.mult),backgroundColor:PALETTE,borderColor:'rgba(5,10,20,.9)',borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{boxWidth:8,font:{size:9}}}},cutout:'55%'}});},60));
 }
 function renderSOTPSegs(){const b=$('sotpSegBody');if(!b)return;b.innerHTML=window._sotpSegs.map((s,i)=>`<tr><td style="padding:7px 8px"><input style="background:transparent;border:none;border-bottom:1px dashed var(--b);color:var(--t2);font-family:var(--fm);font-size:10px;width:130px;outline:none" value="${s.name}" onchange="window._sotpSegs[${i}].name=this.value"></td><td style="padding:7px 8px;text-align:right"><input type="number" style="background:transparent;border:none;border-bottom:1px dashed var(--b);color:var(--c1);font-family:var(--fm);font-size:10px;width:70px;text-align:right;outline:none" value="${s.val||''}" placeholder="0" onchange="window._sotpSegs[${i}].val=parseFloat(this.value)||0"></td><td style="padding:7px 8px"><select style="background:var(--sur2);border:1px solid var(--b);color:var(--t2);font-family:var(--fm);font-size:10px;border-radius:4px;padding:3px 6px" onchange="window._sotpSegs[${i}].type=this.value"><option ${s.type==='EBITDA'?'selected':''}>EBITDA</option><option ${s.type==='Revenue'?'selected':''}>Revenue</option><option ${s.type==='Book'?'selected':''}>Book</option></select></td><td style="padding:7px 8px;text-align:right"><input type="number" style="background:transparent;border:none;border-bottom:1px dashed var(--b);color:var(--c5);font-family:var(--fm);font-size:10px;width:40px;text-align:right;outline:none" value="${s.mult}" step=".5" onchange="window._sotpSegs[${i}].mult=parseFloat(this.value)||0"></td><td style="padding:7px 8px;text-align:right;font-family:var(--fm);font-size:10px;color:var(--c1)">${fM((s.val||0)*s.mult)}</td></tr>`).join('');}
 function addSOTPSeg(){window._sotpSegs.push({name:'Segment '+(window._sotpSegs.length+1),val:0,type:'EBITDA',mult:8});renderSOTPSegs();}
 function calcSOTP(){const tot=window._sotpSegs.reduce((a,s)=>a+(s.val||0)*s.mult,0);const ps=S.shares>0?(tot-V.netDebt)/S.shares:0;set('sotpCustomVal',f(ps));}
 
-// rNPV — pipeline-driven, reads from editable drug inputs
-function renderRNPV(){
-  if(!window._rnpvDrugs){
-    window._rnpvDrugs=[
-      {n:'Drug A',stage:'Ph3',peakRev:800,pos:58},
-      {n:'Drug B',stage:'Ph2',peakRev:400,pos:35},
-      {n:'Drug C',stage:'Ph1',peakRev:600,pos:63},
-      {n:'Drug D',stage:'Pre',peakRev:300,pos:52},
-    ];
-  }
-  const stageDisc={Ph3:1.38,Ph2:0.54,Ph1:0.76,Pre:0.39};
-  const stageCols={Ph3:'c',Ph2:'p',Ph1:'o',Pre:'r'};
-  window._rnpvDrugs.forEach(d=>{
-    d.unr=Math.round(d.peakRev*(stageDisc[d.stage]||0.5));
-    d.rnpv=Math.round(d.unr*d.pos/100);
-    d.c=CL[stageCols[d.stage]||'p'];
-  });
-  const total=window._rnpvDrugs.reduce((a,d)=>a+d.rnpv,0);
-  const netCash=Math.max(0,(S.cash||0)-(S.debt||0));
-  const rnpvPerShare=S.shares>0?(total+netCash)/S.shares:0;
-  V.rnpv=rnpvPerShare;
-  const mos=S.price>0&&V.rnpv?(V.rnpv-S.price)/S.price*100:null;
-  modelPage('rnpv','rNPV — Biotech / Pharma','Risk-adjusted NPV: pipeline probability-weighted by clinical success odds',
-    kpiCard('Total Pipeline rNPV','$'+total+'M',window._rnpvDrugs.length+' drugs · edit below','purple')+
-    kpiCard('rNPV Per Share',f(V.rnpv),'pipeline + net cash / shares','cyan')+
-    kpiCard('vs Current Price',mos!=null?pct(mos):'—',f(S.price),mos>5?'green':mos<-5?'red':'gold')+
-    kpiCard('Net Cash',fM(netCash),'cash minus debt'),
-  `<div class="card mb"><div class="ct"><span class="d p"></span>Pipeline Inputs — edit values and hit Recalculate</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px">
-      <thead><tr>
-        <th style="text-align:left;padding:8px 10px;font-family:var(--fd);font-size:7.5px;letter-spacing:.14em;color:var(--t2);border-bottom:1px solid var(--b)">Drug</th>
-        <th style="text-align:center;padding:8px 10px;font-family:var(--fd);font-size:7.5px;letter-spacing:.14em;color:var(--t2);border-bottom:1px solid var(--b)">Stage</th>
-        <th style="text-align:right;padding:8px 10px;font-family:var(--fd);font-size:7.5px;letter-spacing:.14em;color:var(--t2);border-bottom:1px solid var(--b)">Peak Rev ($M)</th>
-        <th style="text-align:right;padding:8px 10px;font-family:var(--fd);font-size:7.5px;letter-spacing:.14em;color:var(--t2);border-bottom:1px solid var(--b)">PoS (%)</th>
-        <th style="text-align:right;padding:8px 10px;font-family:var(--fd);font-size:7.5px;letter-spacing:.14em;color:var(--t2);border-bottom:1px solid var(--b)">Unrisked NPV</th>
-        <th style="text-align:right;padding:8px 10px;font-family:var(--fd);font-size:7.5px;letter-spacing:.14em;color:var(--t2);border-bottom:1px solid var(--b)">rNPV</th>
-      </tr></thead>
-      <tbody>${window._rnpvDrugs.map((d,i)=>`<tr>
-        <td style="padding:6px 8px"><input value="${d.n}" onchange="window._rnpvDrugs[${i}].n=this.value" style="width:100%;background:transparent;border:1px solid var(--b);border-radius:4px;color:var(--t1);font-size:11px;padding:2px 6px"></td>
-        <td style="padding:6px 8px;text-align:center">
-          <select onchange="window._rnpvDrugs[${i}].stage=this.value;renderRNPV()" style="background:var(--sur);color:var(--t1);border:1px solid var(--b);border-radius:4px;font-size:10px;padding:2px 4px">
-            ${['Ph3','Ph2','Ph1','Pre'].map(s=>`<option${d.stage===s?' selected':''}>${s}</option>`).join('')}
-          </select>
-        </td>
-        <td style="padding:6px 8px;text-align:right"><input type="number" value="${d.peakRev}" onchange="window._rnpvDrugs[${i}].peakRev=+this.value;renderRNPV()" style="width:70px;background:transparent;border:1px solid var(--b);border-radius:4px;color:var(--t1);font-size:11px;text-align:right;padding:2px 6px"></td>
-        <td style="padding:6px 8px;text-align:right"><input type="number" value="${d.pos}" min="0" max="100" onchange="window._rnpvDrugs[${i}].pos=+this.value;renderRNPV()" style="width:55px;background:transparent;border:1px solid var(--b);border-radius:4px;color:${d.c};font-size:11px;text-align:right;padding:2px 6px"></td>
-        <td style="padding:6px 8px;text-align:right;font-family:var(--fm);color:var(--t2)">$${d.unr}M</td>
-        <td style="padding:6px 8px;text-align:right;font-family:var(--fm);color:${d.c}">$${d.rnpv}M</td>
-      </tr>`).join('')}
-      <tr style="border-top:2px solid var(--b)">
-        <td colspan="4" style="padding:8px 10px;text-align:right;font-family:var(--fd);font-size:8.5px;color:var(--t2);letter-spacing:.1em">TOTAL PIPELINE rNPV</td>
-        <td></td>
-        <td style="padding:8px 10px;text-align:right;font-family:var(--fm);color:var(--c4)">$${total}M</td>
-      </tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="g2 mb">
-    <div class="card accent"><div class="ct"><span class="d p"></span>Pipeline — Unrisked NPV vs rNPV</div>
-      <div class="chart-h" style="height:220px"><canvas id="rnpvBarCh"></canvas></div></div>
-    <div class="card"><div class="ct"><span class="d c"></span>Clinical Stage Benchmark PoS (%)</div>
-      <div class="chart-h" style="height:220px"><canvas id="rnpvPosCh"></canvas></div></div>
-  </div>
-  <div class="card mb"><div class="ct"><span class="d p"></span>rNPV Contribution Ranking by Drug</div>
-  ${buildRankBars('rNPV ($M)',window._rnpvDrugs.map((d,i)=>({label:d.n,val:d.rnpv,fmt:v=>'$'+v+'M',isYou:i===0})))}</div>`);
-  requestAnimationFrame(()=>setTimeout(()=>{
-    mkChart('rnpvBarCh',{type:'bar',data:{labels:window._rnpvDrugs.map(d=>d.n),datasets:[{label:'Unrisked NPV',data:window._rnpvDrugs.map(d=>d.unr),backgroundColor:CL.p+'44',borderColor:CL.p,borderWidth:1,borderRadius:4},{label:'rNPV',data:window._rnpvDrugs.map(d=>d.rnpv),backgroundColor:window._rnpvDrugs.map(d=>d.c+'88'),borderColor:window._rnpvDrugs.map(d=>d.c),borderWidth:1.5,borderRadius:4}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:8}}},
-        scales:{x:{grid:{color:GC},ticks:{color:TC}},y:{grid:{color:GC},ticks:{color:TC,callback:v=>'$'+v+'M'}}}}});
-    mkChart('rnpvPosCh',{type:'bar',data:{labels:['Pre-Ph1','Ph1-Ph2','Ph2-Ph3','Ph3-NDA','NDA-Appr'],datasets:[{label:'Benchmark PoS (%)',data:[39,63,35,58,85],backgroundColor:[CL.o+'88',CL.gold+'88',CL.r+'88',CL.c+'88',CL.g+'88'],borderColor:[CL.o,CL.gold,CL.r,CL.c,CL.g],borderWidth:1.5,borderRadius:6}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{grid:{color:GC},ticks:{color:TC}},y:{grid:{color:GC},ticks:{color:TC,callback:v=>v+'%'},max:100}}}});
-  },50));
-}
 
 
 // LIQUIDATION
@@ -1482,6 +1462,13 @@ function renderLiq(){
   ])}</div>
   <div class="card mb"><div class="ct"><span class="d c"></span>Book Value Per Share Ranking</div>
   ${buildRankBars('TBV/Share',[{label:S.ticker||'You',val:S.tbv||0,isYou:true,fmt:f},...S.leaders.map(l=>({label:l.tick,val:l.tbv||0,fmt:f}))])}</div>`);
+
+  const ell=document.getElementById('cnt-liq');
+  if(ell)ell.insertAdjacentHTML('beforeend',formulaBox([
+    {name:'Liquidation Value',formula:'Σ (Assetᵢ × Recovery Rateᵢ) − Liabilities',desc:'Each asset class is haircut by a recovery rate, then liabilities are deducted. Absolute floor value.'},
+    {name:'Recovery Rate',formula:'Realised proceeds ÷ Book value',desc:'Averages: cash 100%, receivables 70–85%, inventory 50–70%, PP&E 30–50%, goodwill ~0%.'},
+    {name:'Per Share Floor',formula:'Net Liquidation Value ÷ Shares',desc:'A stock trading below liquidation value is theoretically cheaper than breaking up the company.'},
+  ]));
   requestAnimationFrame(()=>setTimeout(()=>{
     mkChart('liqBarCh',{type:'bar',indexAxis:'y',data:{labels:assets.map(a=>a.n),datasets:[{label:'Recovery %',data:assets.map(a=>a.rec),backgroundColor:assets.map(a=>a.rec>70?CL.g+'88':a.rec>30?CL.gold+'88':CL.r+'88'),borderColor:assets.map(a=>a.rec>70?CL.g:a.rec>30?CL.gold:CL.r),borderWidth:1.5,borderRadius:3}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
@@ -1524,6 +1511,14 @@ function renderMNA(){
     <div class="card"><div class="ct"><span class="d gold"></span>TBV/Share Ranking</div>
     ${buildRankBars('TBV/Share',[{label:S.ticker||'You',val:S.tbv||0,isYou:true,fmt:f},...S.leaders.map(l=>({label:l.tick,val:l.tbv||0,fmt:f}))])}</div>
   </div>`);
+
+  const elm=document.getElementById('cnt-mna');
+  if(elm)elm.insertAdjacentHTML('beforeend',formulaBox([
+    {name:'M&A Enterprise Value',formula:'EBITDA × Transaction Multiple',desc:'What acquirers paid for comparable companies in precedent transactions — includes control premium.'},
+    {name:'Control Premium',formula:'Implied EV × (1 + Premium %)',desc:'Acquisitions typically include 20–40% premium over market price. Varies by sector and deal dynamics.'},
+    {name:'Equity Value',formula:'Implied EV − Debt + Cash',desc:'Bridge from enterprise value to equity value, then divide by shares for per-share acquisition price.'},
+    {name:'EV / Revenue Multiple',formula:'Precedent EV ÷ Target Revenue',desc:'Used alongside EV/EBITDA — especially useful for high-growth or low-margin targets.'},
+  ]));
   requestAnimationFrame(()=>setTimeout(()=>{
     mkChart('mnaBarCh',{type:'bar',data:{labels:['P/TBV (1.5×)','P/E Deal (12×)','Control Prem (8%)','Average'],datasets:[{data:[v1,v2,v3,avg],backgroundColor:[CL.c+'88',CL.p+'88',CL.gold+'88',CL.g+'cc'],borderColor:[CL.c,CL.p,CL.gold,CL.g],borderWidth:1.5,borderRadius:4}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
@@ -1591,6 +1586,14 @@ function calcWACCLive(){
 function applyWACC(){const w=parseFloat($('wbWacc')?.textContent)||0;if(w>0){$('iWacc').value=w.toFixed(2);S.wacc=w;recalcAll();toast('WACC of '+w.toFixed(2)+'% applied to all models','ok');}}
 
 // SENSITIVITY
+  const elw=document.getElementById('cnt-wacc');
+  if(elw)elw.insertAdjacentHTML('beforeend',formulaBox([
+    {name:'WACC',formula:'(E/V × Ke) + (D/V × Kd × (1−T))',desc:'Weighted average of cost of equity and after-tax cost of debt, weighted by their share of total capital.'},
+    {name:'Cost of Equity (CAPM)',formula:'Ke = Rf + β × (Rm − Rf)',desc:'Risk-free rate + beta × equity risk premium. Beta measures how volatile the stock is vs the market.'},
+    {name:'After-Tax Cost of Debt',formula:'Kd × (1 − Tax Rate)',desc:'Interest on debt is tax-deductible — the true cost of debt is reduced by the tax shield.'},
+    {name:'Capital Structure Weights',formula:'E/V = Equity ÷ (Equity + Debt)',desc:'Equity and debt weights based on market values, not book values.'},
+  ]));
+
 function renderSens(){
   const c=$('cnt-sensitivity');if(!c)return;
   const gy=Math.round(S.gYrs),ty=Math.round(S.termYrs),eps=S.eps||1;
